@@ -4,9 +4,10 @@
 [![Release](https://img.shields.io/github/v/release/rinkelzz/foto-globus?include_prereleases)](https://github.com/rinkelzz/foto-globus/releases)
 [![Lizenz: GPL-3.0](https://img.shields.io/badge/Lizenz-GPL--3.0-blue.svg)](LICENSE)
 
-Deine Fotos aus **Synology Photos** als Pinnadeln auf einer drehbaren **Weltkugel** – direkt auf der eigenen NAS,
-als Paket mit eigenem Fenster in DSM. Jede Nadel zeigt, wie viele Fotos an diesem Ort entstanden sind. Ein Klick
-öffnet die Galerie, von dort geht es in die Großansicht oder zum Original. Persönliche Fotos sieht nur der
+Deine Fotos und Videos aus **Synology Photos** als Pinnadeln auf einer drehbaren **Weltkugel** – direkt auf der
+eigenen NAS, als Paket mit eigenem Fenster in DSM. Jede Nadel zeigt, wie viele Fotos an diesem Ort entstanden sind.
+Ein Klick öffnet die Galerie, von dort geht es in die Großansicht, zum Video oder zum Original. Mit Ortsnamen,
+Suche, Statistik und eingefärbten Reiseländern. Persönliche Fotos sieht nur der
 Besitzer, gemeinsame Fotos richten sich nach den **Ordnerrechten in DSM**.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lapalutschi)
@@ -19,9 +20,13 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 |---|---|
 | ![Globus](docs/screenshots/globus.jpg) | ![Galerie](docs/screenshots/galerie.jpg) |
 
-| Großansicht | Am Handy |
+| Suche nach Ort oder Land | Statistik „Meine Welt“ |
 |---|---|
-| ![Großansicht](docs/screenshots/grossansicht.jpg) | ![Handy](docs/screenshots/handy.jpg) |
+| ![Suche](docs/screenshots/suche-ort.jpg) | ![Statistik](docs/screenshots/statistik.jpg) |
+
+| Videos abspielen | Am Handy |
+|---|---|
+| ![Video](docs/screenshots/video.jpg) | ![Handy](docs/screenshots/handy.jpg) |
 
 | Einstellungen: Ordner und Rechte | Einstellungen: Suche |
 |---|---|
@@ -44,8 +49,15 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 
 - **3D-Weltkugel** zum Drehen und Zoomen (MapLibre GL, liegt im Paket). Nahe Fotos werden zu einer **Pinnadel mit Zahl**
   zusammengefasst und teilen sich beim Hineinzoomen auf. **Grün = meine Fotos, rot = gemeinsame.**
-- **Galerie** pro Pinnadel, nach Tag bzw. Monat gruppiert, Vorschaubilder werden erst beim Scrollen geladen.
-- **Großansicht** mit Blättern (Pfeiltasten, Wischen am Handy), Aufnahmezeit, Kamera, Ordner, Koordinaten,
+- **Galerie** pro Pinnadel mit Ortsnamen als Titel, nach Tag bzw. Monat gruppiert, Vorschaubilder werden erst beim
+  Scrollen geladen.
+- **Ortsnamen** wie „Palma, Spanien“ – offline aus GeoNames (alle Orte ab 1.000 Einwohnern), bekannte Orte auf Deutsch.
+- **Suche** nach Ort oder Land: der Globus fliegt hin und öffnet die Fotos.
+- **Statistik „Meine Welt“**: Länder, Orte, Fotos pro Jahr (Klick filtert), Top-Orte, Länderliste – und die
+  **besuchten Länder** werden auf dem Globus eingefärbt.
+- **Videos** (MP4, MOV, M4V, 3GP) von iPhone, Android und Kameras: mit Ort, Zeit und Länge, **abspielbar** in der
+  Großansicht (mit Spulen). Ist eine kleinere Fassung von Synology Photos da, wird die genommen.
+- **Großansicht** mit Blättern (Pfeiltasten, Wischen am Handy), Ort, Aufnahmezeit, Kamera, Ordner, Koordinaten,
   „Auf dem Globus zeigen“ und **Original herunterladen**.
 - **Filter:** Zeitraum (von/bis Jahr) und Bereich (alle, nur meine, nur gemeinsame).
 - Liest **JPEG, HEIC/HEIF (iPhone), PNG, TIFF, DNG, NEF, ARW, CR2** – in reinem Python, ohne Pillow oder andere
@@ -97,7 +109,8 @@ eintragen. Läuft DSM selbst über https, öffnet das DSM-Fenster dann diese Adr
 
 ## Karte und Datenschutz
 
-Die Kartenbilder kommen standardmäßig von [OpenFreeMap](https://openfreemap.org) (frei, ohne Schlüssel). Der Browser
+Ortsnamen ermittelt der Foto-Globus **offline** auf der NAS (Ortsliste im Paket). Die Kartenbilder kommen
+standardmäßig von [OpenFreeMap](https://openfreemap.org) (frei, ohne Schlüssel). Der Browser
 lädt sie direkt dort; der Anbieter sieht dabei nur, welche Gegend gerade angezeigt wird. **Fotos und ihre
 Koordinaten verlassen die NAS nicht.** Ist der Kartendienst nicht erreichbar (oder das Feld „Kartenstil“ leer),
 zeigt der Globus eine schlichte Kugel mit Ländergrenzen, die im Paket liegt.
@@ -132,13 +145,13 @@ FG_DATA_DIR=/tmp/fg/data FG_VOLUME_ROOT=/tmp/fg FG_SCHEDULER=0 python -m app.mai
 ```
 
 Aufbau: FastAPI + SQLite, statisches HTML/CSS/JS ohne Build-Schritt. Die wichtigsten Teile:
-`app/exif.py` (Exif aus JPEG/HEIC/PNG/TIFF), `app/scanner.py` (Fotoordner durchsuchen), `app/access.py`
+`app/exif.py` (Exif aus JPEG/HEIC/PNG/TIFF, Ort/Zeit aus MP4/MOV), `app/geo.py` (Ortsnamen offline),
+`app/scanner.py` (Fotoordner durchsuchen), `app/access.py`
 (Rechte nach DSM), `app/routers/photos.py` (Punkte, Galerie, Vorschauen), `app/static/app.js` (Globus).
 Die Länderkugel `app/static/vendor/world.geojson` entsteht mit `tools/make_world.py` aus world-atlas.
 
 ## Pläne
 
-- **0.2:** Ortsnamen („Palma, Spanien“) offline, Suche nach Ort/Land, Statistik (Länder, Orte), Videos (MOV/MP4)
 - **0.3:** Reisen automatisch erkennen und als Route zeigen, Absprung zu Synology Photos, Satellitenbild
 - **0.4:** „Reise nachspielen“ (Kamerafahrt), Heatmap
 
@@ -151,12 +164,16 @@ Synology-Produkt. Sicherheitshinweise stehen in [SECURITY.md](SECURITY.md).
 
 GPL-3.0, siehe [LICENSE](LICENSE). Enthalten sind außerdem
 [MapLibre GL JS](https://github.com/maplibre/maplibre-gl-js) (BSD-3-Clause, `app/static/vendor/LICENSE-maplibre.txt`)
-und Ländergrenzen aus [world-atlas](https://github.com/topojson/world-atlas) / Natural Earth (ISC bzw. gemeinfrei,
-`app/static/vendor/LICENSE-world-atlas.txt`).
+Ländergrenzen aus [world-atlas](https://github.com/topojson/world-atlas) / Natural Earth (ISC bzw. gemeinfrei,
+`app/static/vendor/LICENSE-world-atlas.txt`), Ortsnamen von [GeoNames](https://www.geonames.org) (CC BY 4.0) über
+[all-the-cities](https://github.com/zeke/all-the-cities) (MIT) und deutsche Ländernamen aus
+[i18n-iso-countries](https://github.com/michaelwittig/node-i18n-iso-countries) (MIT). Erzeugt mit
+`tools/make_places.py` und `tools/make_world.py`.
 
 ## English
 
-**Photo Globe for Synology** shows your Synology Photos as pins on a rotatable 3D globe, as a DSM 7 package with its
+**Photo Globe for Synology** shows your Synology Photos and videos as pins on a rotatable 3D globe, with offline place
+names (GeoNames), search, statistics and highlighted visited countries, as a DSM 7 package with its
 own DSM window and single sign-on. Personal photos are visible only to their owner; shared photos follow the DSM
 folder permissions (checked via `synoacltool`). GPS and capture time are read in pure Python from JPEG, HEIC, PNG and
 TIFF-based RAW files; thumbnails come from Synology Photos itself. Map tiles are loaded by the browser from

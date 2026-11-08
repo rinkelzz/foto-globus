@@ -12,6 +12,7 @@ Alle Zugriffe sind begrenzt (Größen, Anzahl Einträge, Verschachtelung), damit
 manipulierte Dateien den Scan nicht aufhalten oder Speicher fressen.
 """
 import os
+import re
 import struct
 from datetime import datetime, timedelta, timezone
 from typing import BinaryIO, Dict, Optional, Tuple
@@ -23,6 +24,8 @@ JPEG_SCAN_LIMIT = 4 * 1024 * 1024   # so weit suchen wir in einer JPEG-Datei nac
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".jpe", ".heic", ".heif", ".hif", ".png", ".tif", ".tiff",
               ".dng", ".nef", ".arw", ".cr2"}
+VIDEO_EXTS = {".mp4", ".m4v", ".mov", ".3gp"}
+MEDIA_EXTS = PHOTO_EXTS | VIDEO_EXTS
 
 
 class ExifError(ValueError):
@@ -412,6 +415,157 @@ def read_exif_block(path: str) -> Tuple[Optional[bytes], str]:
             f.seek(0)
             return f.read(min(size, MAX_EXIF * 8)), "tiff"
     return None, "unbekannt"
+
+
+# ---------------------------------------------------------------------------
+# Videos (MP4/MOV): Ort und Zeit stehen im „moov“-Block
+# ---------------------------------------------------------------------------
+
+_ISO6709 = re.compile(r"^\s*([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)?")
+_MAC_EPOCH = datetime(1904, 1, 1, tzinfo=timezone.utc)
+MAX_META = 4 * 1024 * 1024
+
+
+def parse_iso6709(text: str) -> Optional[Tuple[float, float, Optional[float]]]:
+    """„+39.5696+002.6502+012.000/“ → (39.5696, 2.6502, 12.0)"""
+    m = _ISO6709.match(text or "")
+    if not m:
+        return None
+    lat, lon = float(m.group(1)), float(m.group(2))
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180) or (abs(lat) < 1e-6 and abs(lon) < 1e-6):
+        return None
+    return lat, lon, float(m.group(3)) if m.group(3) else None
+
+
+def _parse_loci(b: bytes) -> Optional[Tuple[float, float, Optional[float]]]:
+    """3GPP-Ortsangabe (ffmpeg, manche Kameras): Version/Flags, Sprache, Name\0, Rolle, Länge, Breite, Höhe (16.16)."""
+    if len(b) < 7:
+        return None
+    end = b.find(b"\x00", 6)
+    p = (end if end >= 0 else len(b)) + 2  # Name + Nullbyte + Rolle
+    if p + 12 > len(b):
+        return None
+    lon, lat, alt = (v / 65536.0 for v in struct.unpack(">iii", b[p:p + 12]))
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180) or (abs(lat) < 1e-6 and abs(lon) < 1e-6):
+        return None
+    return lat, lon, alt
+
+
+def _video_date(text: str) -> Optional[str]:
+    """Apple-Format „2024-07-14T18:22:05+0200“ → ISO mit Offset."""
+    t = (text or "").strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.strptime(t[:24], fmt)
+        except ValueError:
+            continue
+        return dt.isoformat() if 1900 <= dt.year <= 2100 else None
+    return None
+
+
+def _meta_items(f: BinaryIO, start: int, end: int) -> Dict[str, str]:
+    """QuickTime-Metadaten (meta → keys + ilst) als {schlüssel: text}."""
+    keys: Dict[int, str] = {}
+    values: Dict[int, str] = {}
+    # In MP4 ist „meta“ eine FullBox (4 Byte Version/Flags), in QuickTime nicht
+    probe = _read(f, start + 4, 4)
+    if probe not in (b"hdlr", b"keys", b"ilst"):
+        start += 4
+    for typ, s, e in _boxes(f, start, end):
+        if e - s > MAX_META:
+            continue
+        if typ == b"keys":
+            b = _read(f, s, e - s)
+            count = struct.unpack(">I", b[4:8])[0] if len(b) >= 8 else 0
+            p = 8
+            for idx in range(1, min(count, 1000) + 1):
+                if p + 8 > len(b):
+                    break
+                size = struct.unpack(">I", b[p:p + 4])[0]
+                if size < 8:
+                    break
+                keys[idx] = b[p + 8:p + size].decode("utf-8", "replace")
+                p += size
+        elif typ == b"ilst":
+            for item, s2, e2 in _boxes(f, s, e):
+                idx = struct.unpack(">I", item)[0]
+                for dt, s3, e3 in _boxes(f, s2, e2):
+                    if dt == b"data" and e3 - s3 > 8 and e3 - s3 < 4096:
+                        raw = _read(f, s3, e3 - s3)
+                        if struct.unpack(">I", raw[:4])[0] & 0xFFFFFF == 1:  # UTF-8-Text
+                            values[idx] = raw[8:].decode("utf-8", "replace")
+    return {keys[i]: v for i, v in values.items() if i in keys}
+
+
+def read_video(path: str) -> Dict:
+    """Aufnahmeort, -zeit und Länge eines Videos (MP4/MOV, auch iPhone und Android)."""
+    info: Dict = {"kind": "video"}
+    with open_nofollow(path) as f:
+        size = os.fstat(f.fileno()).st_size
+        if _read(f, 4, 4) not in (b"ftyp", b"moov", b"wide", b"mdat", b"free", b"skip"):
+            return info
+        moov = next(((s, e) for typ, s, e in _boxes(f, 0, size) if typ == b"moov"), None)
+        if not moov:
+            return info
+        loc = None
+        created_utc = None
+        for typ, s, e in _boxes(f, *moov):
+            if typ == b"mvhd":
+                b = _read(f, s, 32)
+                if len(b) >= 20:
+                    if b[0] == 1 and len(b) >= 32:
+                        created, scale, dur = struct.unpack(">Q", b[4:12])[0], struct.unpack(">I", b[20:24])[0], struct.unpack(">Q", b[24:32])[0]
+                    else:
+                        created, scale, dur = struct.unpack(">I", b[4:8])[0], struct.unpack(">I", b[12:16])[0], struct.unpack(">I", b[16:20])[0]
+                    if scale:
+                        info["duration"] = round(dur / scale, 1)
+                    if created > 0:
+                        dt = _MAC_EPOCH + timedelta(seconds=created)
+                        if 1971 <= dt.year <= 2100:
+                            created_utc = dt
+            elif typ == b"udta":
+                for t2, s2, e2 in _boxes(f, s, e):
+                    if t2 == b"\xa9xyz" and e2 - s2 < 256:
+                        loc = loc or parse_iso6709(_read(f, s2 + 4, e2 - s2 - 4).decode("ascii", "replace"))
+                    elif t2 == b"loci" and e2 - s2 < 1024:
+                        loc = loc or _parse_loci(_read(f, s2, e2 - s2))
+                    elif t2 == b"meta":
+                        items = _meta_items(f, s2, e2)
+                        loc = loc or parse_iso6709(items.get("com.apple.quicktime.location.ISO6709", ""))
+            elif typ == b"meta":
+                items = _meta_items(f, s, e)
+                loc = parse_iso6709(items.get("com.apple.quicktime.location.ISO6709", "")) or loc
+                taken = _video_date(items.get("com.apple.quicktime.creationdate", ""))
+                if taken:
+                    info["taken_at"] = taken
+                for k, key in (("com.apple.quicktime.make", "make"), ("com.apple.quicktime.model", "model")):
+                    if items.get(k):
+                        info[key] = items[k][:64]
+    if loc:
+        info["lat"], info["lon"] = round(loc[0], 6), round(loc[1], 6)
+        if loc[2] is not None:
+            info["alt"] = round(loc[2], 1)
+    if "taken_at" not in info and created_utc:
+        try:
+            from .timeutil import to_local
+            info["taken_at"] = to_local(created_utc).isoformat()
+        except Exception:  # noqa: BLE001 – ohne Zeitzone eben UTC
+            info["taken_at"] = created_utc.isoformat()
+    return info
+
+
+def read_media(path: str) -> Dict:
+    """Foto oder Video – je nach Dateiendung. Ergebnis enthält „media“: photo | video."""
+    if os.path.splitext(path)[1].lower() in VIDEO_EXTS:
+        try:
+            info = read_video(path)
+        except (struct.error, IndexError, ValueError):
+            info = {"kind": "video"}
+        info["media"] = "video"
+        return info
+    info = read_photo(path)
+    info["media"] = "photo"
+    return info
 
 
 def read_photo(path: str) -> Dict:

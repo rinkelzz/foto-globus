@@ -99,7 +99,7 @@ def _walk(top: str, errors: List[str]):
                 if ent.is_dir(follow_symlinks=False):
                     stack.append(ent.path)
                 elif ent.is_file(follow_symlinks=False):
-                    if os.path.splitext(ent.name)[1].lower() in exif.PHOTO_EXTS:
+                    if os.path.splitext(ent.name)[1].lower() in exif.MEDIA_EXTS:
                         st = ent.stat(follow_symlinks=False)
                         yield d, ent.name, st.st_size, int(st.st_mtime)
             except OSError as e:
@@ -134,7 +134,7 @@ def _scan_root(conn: sqlite3.Connection, root: Root, run_id: int, stats: Dict, e
                 seen_ids.append(old[0])
             else:
                 try:
-                    info = exif.read_photo(path)
+                    info = exif.read_media(path)
                 except OSError as e:
                     errors.append(f"{path}: {e.strerror or e}")
                     if old:
@@ -144,18 +144,19 @@ def _scan_root(conn: sqlite3.Connection, root: Root, run_id: int, stats: Dict, e
                 vals = (root.scope, root.owner, folder, name, size, mtime, info.get("kind"), taken,
                         _year_of(taken, mtime), info.get("lat"), info.get("lon"), info.get("alt"),
                         info.get("make"), info.get("model"), info.get("width"), info.get("height"),
-                        info.get("orientation"), run_id)
+                        info.get("orientation"), info.get("media", "photo"), info.get("duration"), run_id)
                 if old:
                     conn.execute(
                         "UPDATE photos SET scope=?, owner=?, folder=?, name=?, size=?, mtime=?, kind=?, taken_at=?, year=?,"
-                        " lat=?, lon=?, alt=?, make=?, model=?, width=?, height=?, orientation=?, seen_scan=? WHERE id=?",
+                        " lat=?, lon=?, alt=?, make=?, model=?, width=?, height=?, orientation=?, media=?, duration=?,"
+                        " seen_scan=?, place=NULL, cc=NULL, geocoded=0 WHERE id=?",
                         vals + (old[0],))
                     stats["files_changed"] += 1
                 else:
                     conn.execute(
                         "INSERT INTO photos(scope, owner, folder, name, size, mtime, kind, taken_at, year, lat, lon, alt,"
-                        " make, model, width, height, orientation, seen_scan, path, added_at)"
-                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        " make, model, width, height, orientation, media, duration, seen_scan, path, added_at)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         vals + (path, now_utc_str()))
                     stats["files_new"] += 1
                 pending += 1
@@ -229,6 +230,8 @@ def run(trigger: str = "manuell", actor_id: Optional[int] = None) -> Optional[Di
                     break
             if status == "fertig":
                 stats["files_removed"] += _forget_vanished_roots(conn, all_roots)
+                _state["root"] = "Ortsnamen"
+                geocode_pending(conn)
         except Exception as e:  # noqa: BLE001 – Scan-Fehler dürfen die App nicht stören
             status = "fehler"
             errors.append(f"{type(e).__name__}: {e}")
@@ -246,6 +249,53 @@ def run(trigger: str = "manuell", actor_id: Optional[int] = None) -> Optional[Di
         from . import access
         access.clear_cache()  # neue Ordner → Rechte neu ermitteln
         return last_run(conn)
+    finally:
+        conn.close()
+        _state.update(running=False, root=None)
+        _lock.release()
+
+
+def geocode_pending(conn: sqlite3.Connection) -> int:
+    """Ortsnamen für alle Fotos mit Koordinaten nachtragen, die noch keinen haben (offline, GeoNames)."""
+    from . import geo
+    done = 0
+    try:
+        while not _cancel.is_set():
+            rows = conn.execute("SELECT id, lat, lon FROM photos WHERE geocoded = 0 AND lat IS NOT NULL LIMIT 2000").fetchall()
+            if not rows:
+                break
+            conn.execute("BEGIN")
+            for r in rows:
+                hit = geo.nearest(r["lat"], r["lon"])
+                place, cc = (hit[0], hit[1]) if hit else (None, None)
+                conn.execute("UPDATE photos SET place = ?, cc = ?, geocoded = 1 WHERE id = ?", (place, cc, r["id"]))
+            conn.execute("COMMIT")
+            done += len(rows)
+        # Fotos ohne Koordinaten brauchen keinen Ortsnamen
+        conn.execute("UPDATE photos SET geocoded = 1 WHERE geocoded = 0 AND lat IS NULL")
+    finally:
+        geo.unload()  # Ortsliste nur während der Arbeit im Speicher halten
+    return done
+
+
+def geocode_due() -> None:
+    """Nach einem Update auf 0.2: vorhandene Fotos bekommen ihre Ortsnamen, ohne auf den nächsten Scan zu warten."""
+    if _lock.locked():
+        return
+    conn = connect()
+    try:
+        pending = conn.execute("SELECT 1 FROM photos WHERE geocoded = 0 AND lat IS NOT NULL LIMIT 1").fetchone()
+    finally:
+        conn.close()
+    if not pending or not _lock.acquire(blocking=False):
+        return
+    _cancel.clear()
+    conn = connect()
+    try:
+        _state.update(running=True, root="Ortsnamen", done=0, started=time.time())
+        n = geocode_pending(conn)
+        if n:
+            audit(conn, None, "geocode", "scan", f"{n} Fotos mit Ortsnamen versehen")
     finally:
         conn.close()
         _state.update(running=False, root=None)

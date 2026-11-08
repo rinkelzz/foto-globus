@@ -26,8 +26,8 @@ REPO = os.environ.get("FG_UPDATE_REPO", "rinkelzz/foto-globus")
 API_URL = "https://api.github.com/repos/{repo}/releases/latest"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/main/synology/{name}"
 CHECK_EVERY = 30 * 60
-DESCRIPTION = ("Zeigt die Fotos aus Synology Photos als Pinnadeln auf einer Weltkugel – persönliche und "
-               "gemeinsame Fotos, nach den Ordnerrechten in DSM.")
+DESCRIPTION = ("Zeigt Fotos und Videos aus Synology Photos als Pinnadeln auf einer Weltkugel – mit Ortsnamen, "
+               "Suche und Statistik, nach den Ordnerrechten in DSM.")
 SPK_RE = re.compile(r"^fotoglobus-(\d+\.\d+\.\d+(?:-\d+)?)-noarch\.spk$")
 MAX_SIZE = 200 * 1024 * 1024
 

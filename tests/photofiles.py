@@ -141,3 +141,39 @@ def write(path: str, data: bytes, mtime: Optional[int] = None) -> str:
 def synology_thumb(photo_path: str, size: str = "M", data: bytes = TINY_JPEG) -> str:
     folder, name = os.path.split(photo_path)
     return write(os.path.join(folder, "@eaDir", name, f"SYNOFOTO_THUMB_{size}.jpg"), data)
+
+
+def make_video(lat=None, lon=None, apple=True, created_utc=None, duration_s=12.5, faststart=True,
+               apple_date="2024-07-14T18:22:05+0200", model="iPhone 15 Pro") -> bytes:
+    """Minimales MP4/MOV mit moov (mvhd, udta/©xyz bzw. Apple-meta keys/ilst) und einem mdat."""
+    import datetime as _dt
+    epoch = _dt.datetime(1904, 1, 1, tzinfo=_dt.timezone.utc)
+    created = int(((created_utc or _dt.datetime(2024, 7, 14, 16, 22, 5, tzinfo=_dt.timezone.utc)) - epoch).total_seconds())
+    scale = 600
+    mvhd = _full(b"mvhd", 0, struct.pack(">IIII", created, created, scale, int(duration_s * scale)) + b"\x00" * 80)
+    loc = f"{lat:+08.4f}{lon:+09.4f}+012.000/" if lat is not None else None
+    parts = [mvhd]
+    if apple:
+        entries = []
+        values = []
+        if loc:
+            entries.append(b"com.apple.quicktime.location.ISO6709")
+            values.append(loc.encode())
+        if apple_date:
+            entries.append(b"com.apple.quicktime.creationdate")
+            values.append(apple_date.encode())
+        entries.append(b"com.apple.quicktime.model")
+        values.append(model.encode())
+        keys = _full(b"keys", 0, struct.pack(">I", len(entries)) + b"".join(
+            struct.pack(">I", 8 + len(k)) + b"mdta" + k for k in entries))
+        ilst = _box(b"ilst", b"".join(
+            _box(struct.pack(">I", i + 1), _box(b"data", struct.pack(">II", 1, 0) + v)) for i, v in enumerate(values)))
+        hdlr = _full(b"hdlr", 0, b"\x00" * 4 + b"mdta" + b"\x00" * 12 + b"\x00")
+        parts.append(_box(b"meta", hdlr + keys + ilst))   # QuickTime: keine FullBox
+    elif loc:
+        xyz = loc.encode()
+        parts.append(_box(b"udta", _box(b"\xa9xyz", struct.pack(">HH", len(xyz), 0x15C7) + xyz)))
+    moov = _box(b"moov", b"".join(parts))
+    ftyp = _box(b"ftyp", (b"qt  " if apple else b"isom") + struct.pack(">I", 0) + b"isomiso2mp41")
+    mdat = _box(b"mdat", b"\x00" * 64)
+    return ftyp + (moov + mdat if faststart else mdat + moov)

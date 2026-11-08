@@ -3,13 +3,18 @@
 Nur beim Entwickeln nötig: Die erzeugte Datei liegt im Repo. Sie dient als Grundkarte,
 wenn die Online-Kacheln nicht erreichbar sind (Kugel mit Ländern statt Straßenkarte).
 
-Aufruf:  python tools/make_world.py pfad/zu/countries-50m.json app/static/vendor/world.geojson
+Aufruf:  python tools/make_world.py pfad/zu/countries-50m.json app/static/vendor/world.geojson [codes.json]
+(codes.json aus i18n-iso-countries ordnet die numerischen Ländercodes den Kürzeln wie „DE“ zu.)
 """
 import json
 import sys
 
 
-def decode(topo: dict, name: str) -> dict:
+# Gebiete ohne eigenen ISO-Code in world-atlas – so, wie GeoNames sie führt
+EXTRA_CC = {"Kosovo": "XK", "N. Cyprus": "CY", "Somaliland": "SO", "Siachen Glacier": "IN"}
+
+
+def decode(topo: dict, name: str, numeric_to_a2=None) -> dict:
     scale = topo.get("transform", {}).get("scale", [1, 1])
     translate = topo.get("transform", {}).get("translate", [0, 0])
     arcs = []
@@ -45,7 +50,9 @@ def decode(topo: dict, name: str) -> dict:
             # Ringe über die Datumsgrenze (Russland, Fidschi) bzw. um den Südpol (Antarktis): einzeln flach machen
             for r in poly:
                 out.extend([[piece] for piece in fix_ring(r)])
-        feats.append({"type": "Feature", "properties": {"name": (g.get("properties") or {}).get("name", "")},
+        nm = (g.get("properties") or {}).get("name", "")
+        cc = (numeric_to_a2 or {}).get(str(g.get("id", "")).zfill(3), "") or EXTRA_CC.get(nm, "")
+        feats.append({"type": "Feature", "properties": {"name": (g.get("properties") or {}).get("name", ""), "cc": cc},
                       "geometry": {"type": "MultiPolygon", "coordinates": out}})
     return {"type": "FeatureCollection", "features": feats}
 
@@ -108,7 +115,11 @@ if __name__ == "__main__":
     src, dst = sys.argv[1], sys.argv[2]
     with open(src, encoding="utf-8") as f:
         topo = json.load(f)
-    data = decode(topo, "countries")
+    codes = {}
+    if len(sys.argv) > 3:
+        with open(sys.argv[3], encoding="utf-8") as f:
+            codes = {row[2]: row[0] for row in json.load(f)}  # [alpha2, alpha3, numeric]
+    data = decode(topo, "countries", codes)
     with open(dst, "w", encoding="utf-8") as f:
         json.dump(data, f, separators=(",", ":"))
     print(f"{len(data['features'])} Länder → {dst}")

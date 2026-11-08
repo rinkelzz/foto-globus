@@ -10,7 +10,7 @@ _thread = None
 
 def _tick() -> None:
     from . import backup, scanner, updates
-    for name, job in (("Sicherung", backup.run_due), ("Scan", scanner.run_due)):
+    for name, job in (("Sicherung", backup.run_due), ("Scan", scanner.run_due), ("Ortsnamen", scanner.geocode_due)):
         try:
             job()
         except Exception:  # noqa: BLE001 – ein Fehler darf die anderen Aufgaben nicht stoppen

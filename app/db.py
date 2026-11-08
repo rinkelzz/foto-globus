@@ -6,7 +6,7 @@ from typing import Iterator
 from .config import settings
 from .timeutil import now_utc_str
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -130,6 +130,17 @@ def migrate(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version < 1:
         pass  # Ausgangsschema (0.1.0) – steht vollständig in SCHEMA
+    if version < 2:
+        # 0.2.0: Ortsnamen (offline aus GeoNames) und Videos
+        cols = _columns(conn, "photos")
+        for name, ddl in (("place", "TEXT"),            # Ortsname, z. B. „Palma“ (leer = nur Land bekannt)
+                          ("cc", "TEXT"),               # Ländercode, z. B. „ES“
+                          ("geocoded", "INTEGER NOT NULL DEFAULT 0"),
+                          ("media", "TEXT NOT NULL DEFAULT 'photo'"),   # photo | video
+                          ("duration", "REAL")):        # Länge bei Videos (Sekunden)
+            if name not in cols:
+                conn.execute(f"ALTER TABLE photos ADD COLUMN {name} {ddl}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_photos_cc ON photos(cc, place)")
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 

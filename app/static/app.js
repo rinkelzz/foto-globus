@@ -191,6 +191,14 @@ async function initMap() {
   });
   await new Promise((resolve) => map.on("load", resolve));
   try { map.setProjection({ type: "globe" }); } catch (e) { /* ältere Browser: flache Karte */ }
+  // Besuchte Länder einfärben: Ländergrenzen aus dem Paket, unter Beschriftungen und Pins
+  const worldUrl = new URL(url("static/vendor/world.geojson"), location.href).href;
+  let countrySrc = "world";
+  if (!map.getSource("world")) { map.addSource("countries", { type: "geojson", data: worldUrl }); countrySrc = "countries"; }
+  const firstSymbol = (map.getStyle().layers || []).find(l => l.type === "symbol");
+  map.addLayer({ id: "visited", type: "fill", source: countrySrc, filter: ["in", ["get", "cc"], ["literal", []]],
+                 paint: { "fill-color": accentColor(), "fill-opacity": state.styleOnline ? 0.18 : 0.28 } },
+               state.styleOnline && firstSymbol ? firstSymbol.id : undefined);
   map.addSource("photos", {
     type: "geojson", data: { type: "FeatureCollection", features: [] },
     cluster: true, clusterRadius: 46, clusterMaxZoom: 17,
@@ -228,6 +236,15 @@ function geojson(points) {
   return { type: "FeatureCollection", features: points.map(p => ({
     type: "Feature", geometry: { type: "Point", coordinates: [p[2], p[1]] }, properties: { id: p[0], s: p[4] } })) };
 }
+const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#0f766e";
+const showVisited = () => store.get("fg_visited") !== "0";
+function updateVisited() {
+  const map = state.map;
+  if (!map || !map.getLayer("visited")) return;
+  const ccs = showVisited() ? [...new Set(state.filtered.map(p => p[7]).filter(Boolean))] : [];
+  map.setFilter("visited", ["in", ["get", "cc"], ["literal", ccs]]);
+  map.setPaintProperty("visited", "fill-color", accentColor());
+}
 
 function applyFilter(fit = false) {
   const { yearFrom, yearTo, scope } = state;
@@ -235,6 +252,8 @@ function applyFilter(fit = false) {
     && (!yearFrom || (p[5] || 0) >= yearFrom) && (!yearTo || (p[5] || 9999) <= yearTo));
   const src = state.map && state.map.getSource("photos");
   if (src) src.setData(geojson(state.filtered));
+  updateVisited();
+  if (!$("stats").classList.contains("hidden")) loadStats();
   const n = state.filtered.length;
   $("countChip").textContent = `${nf.format(n)} Foto${n === 1 ? "" : "s"}`;
   $("countChip").title = state.withoutGps ? `${nf.format(state.withoutGps)} Fotos ohne Aufnahmeort werden nicht angezeigt` : "";
@@ -276,6 +295,7 @@ async function loadPoints() {
     const r = await api("points");
     state.points = r.points;
     state.withoutGps = r.without_gps;
+    state.years = r.years;
     fillYears(r.years);
     applyFilter(true);
     if (!r.points.length) {
@@ -327,6 +347,18 @@ const lazy = "IntersectionObserver" in window ? new IntersectionObserver((entrie
   }
 }, { root: $("grid"), rootMargin: "300px" }) : null;
 
+function placeTitle(photos, total) {
+  const counts = new Map();
+  for (const p of photos) if (p.place_label) counts.set(p.place_label, (counts.get(p.place_label) || 0) + 1);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (!sorted.length) return `${nf.format(total)} Foto${total === 1 ? "" : "s"}`;
+  return sorted.length === 1 ? sorted[0][0] : `${sorted[0][0]} + ${sorted.length - 1} weitere${sorted.length === 2 ? "r Ort" : " Orte"}`;
+}
+function countText(photos) {
+  const v = photos.filter(p => p.media === "video").length, f = photos.length - v;
+  return [f ? `${nf.format(f)} Foto${f === 1 ? "" : "s"}` : "", v ? `${nf.format(v)} Video${v === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ");
+}
+const fmtDur = (s) => s == null ? "" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 function rangeText(photos) {
   const dates = photos.map(p => p.taken_at).filter(Boolean).sort();
   if (!dates.length) return "";
@@ -338,6 +370,7 @@ async function openPanel(ids, center, clusterId, total) {
   thumbQueue.waiting.length = 0;
   for (const img of $$("#grid img")) if (img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
   state.panel = { photos: [], center, clusterId };
+  if (window.innerWidth < 720) $("stats").classList.add("hidden");
   $("panel").classList.remove("hidden");
   $("panelTitle").textContent = `${nf.format(total)} Foto${total === 1 ? "" : "s"}`;
   $("panelSub").textContent = "wird geladen …";
@@ -348,7 +381,8 @@ async function openPanel(ids, center, clusterId, total) {
   try { photos = await api("photos/info", { method: "POST", body: { ids: ids.slice(0, 2000) } }); }
   catch (e) { $("panelSub").textContent = e.message; return; }
   state.panel.photos = photos;
-  $("panelSub").textContent = rangeText(photos);
+  $("panelTitle").textContent = placeTitle(photos, total);
+  $("panelSub").textContent = [countText(photos), rangeText(photos)].filter(Boolean).join(" · ");
   if (total > photos.length) $("gridMore").textContent = `Hier werden die ersten ${nf.format(photos.length)} gezeigt – hineinzoomen für den Rest.`;
   // Überschriften: bei wenigen Tagen pro Tag, sonst pro Monat
   const days = new Set(photos.map(p => (p.taken_at || "").slice(0, 10)));
@@ -368,7 +402,8 @@ async function openPanel(ids, center, clusterId, total) {
     b.className = "tile"; b.dataset.id = p.id; b.title = p.name;
     b.tabIndex = 0; b.setAttribute("role", "button");
     b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLightbox(i); } });
-    b.innerHTML = `<img alt="${esc(p.name)}">${p.scope === "personal" ? "" : '<span class="badge">gemeinsam</span>'}`;
+    b.innerHTML = `<img alt="${esc(p.name)}">${p.scope === "personal" ? "" : '<span class="badge">gemeinsam</span>'}` +
+      (p.media === "video" ? `<span class="play"><i>▶</i></span><span class="dur">${fmtDur(p.duration)}</span>` : "");
     b.addEventListener("click", () => openLightbox(i));
     frag.appendChild(b);
     if (lazy) lazy.observe(b); else queueThumb(b.querySelector("img"), p.id);
@@ -396,16 +431,22 @@ async function showLb(i) {
   $("lightbox").classList.remove("hidden");
   $("lbName").textContent = p.name;
   $("lbPos").textContent = photos.length > 1 ? `${i + 1} / ${photos.length}` : "";
-  const bits = [deDateTime(p.taken_at)];
+  const bits = [];
+  if (p.place_label) bits.push(`<b>${esc(p.place_label)}</b>`);
+  bits.push(deDateTime(p.taken_at));
+  if (p.media === "video" && p.duration) bits.push(`Video ${fmtDur(p.duration)}`);
   if (p.camera) bits.push(esc(p.camera));
   if (p.width && p.height) bits.push(`${p.width} × ${p.height}`);
   bits.push(`${p.scope === "personal" ? "Meine Fotos" : "Gemeinsame Fotos"}${p.folder ? " / " + esc(p.folder) : ""}`);
-  bits.push(`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}${p.alt != null ? ` · ${Math.round(p.alt)} m` : ""}`);
+  bits.push(`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}${p.alt ? ` · ${Math.round(p.alt)} m` : ""}`);
   $("lbMeta").innerHTML = bits.join(" · ");
   $("lbPrev").disabled = i === 0;
   $("lbNext").disabled = i === photos.length - 1;
-  const img = $("lbImg");
+  const img = $("lbImg"), vid = $("lbVideo");
   img.removeAttribute("src");
+  vid.pause(); vid.removeAttribute("src"); vid.load();
+  vid.classList.add("hidden"); $("lbVideoMsg").classList.add("hidden"); img.classList.remove("hidden");
+  if (p.media === "video") return showVideo(p, i);
   try {
     const u = await blobUrl(`photos/${p.id}/thumb/xl`);
     if (state.lb !== i) { URL.revokeObjectURL(u); return; }
@@ -413,8 +454,28 @@ async function showLb(i) {
     lbUrl = u; img.src = u;
   } catch (e) { img.alt = "Keine Vorschau vorhanden"; }
 }
+async function showVideo(p, i) {
+  const img = $("lbImg"), vid = $("lbVideo"), msg = $("lbVideoMsg");
+  try {
+    const t = await api(`photos/${p.id}/video-token`);
+    if (state.lb !== i) return;
+    if (!t.playable) throw new Error("Dieses Video kann der Browser nicht abspielen – bitte herunterladen.");
+    img.classList.add("hidden");
+    try { vid.poster = await blobUrl(`photos/${p.id}/thumb/xl`); } catch (e) { vid.removeAttribute("poster"); }
+    vid.src = url(`api/v1/photos/${p.id}/video?vt=${encodeURIComponent(t.token)}`);
+    vid.classList.remove("hidden");
+    vid.onerror = () => {
+      vid.classList.add("hidden");
+      msg.textContent = "Das Video lässt sich hier nicht abspielen (z. B. HEVC/H.265 in diesem Browser). Bitte herunterladen.";
+      msg.classList.remove("hidden");
+    };
+  } catch (e) {
+    img.classList.add("hidden");
+    msg.textContent = e.message; msg.classList.remove("hidden");
+  }
+}
 function openLightbox(i) { showLb(i); }
-function closeLightbox() { $("lightbox").classList.add("hidden"); state.lb = -1; }
+function closeLightbox() { $("lightbox").classList.add("hidden"); state.lb = -1; const v = $("lbVideo"); v.pause(); v.removeAttribute("src"); v.load(); }
 $("lbClose").addEventListener("click", closeLightbox);
 $("lbPrev").addEventListener("click", () => showLb(state.lb - 1));
 $("lbNext").addEventListener("click", () => showLb(state.lb + 1));
@@ -422,6 +483,7 @@ $("lbMap").addEventListener("click", () => {
   const p = state.panel.photos[state.lb];
   closeLightbox();
   state.map.flyTo({ center: [p.lon, p.lat], zoom: 14, duration: 1800 });
+  $("stats").classList.add("hidden");
 });
 $("lbDownload").addEventListener("click", async () => {
   const p = state.panel.photos[state.lb];
@@ -508,6 +570,7 @@ function repaintMap() {
     map.setPaintProperty("borders", "line-color", s.layers[2].paint["line-color"]);
   }
   map.getSource("photos").setData(geojson(state.filtered));
+  updateVisited();
 }
 
 // ---------- Einstellungen (Admins) ----------
@@ -778,6 +841,131 @@ async function tabUpdates(body) {
   };
   show(await api("updates"));
 }
+
+
+// ---------- Suche, Statistik, Länder/Orte öffnen ----------
+function filterQuery() {
+  const q = new URLSearchParams();
+  if (state.yearFrom) q.set("year_from", state.yearFrom);
+  if (state.yearTo) q.set("year_to", state.yearTo);
+  if (state.scope !== "all") q.set("scope", state.scope);
+  return q;
+}
+const flag = (cc) => cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : "🌐";
+
+function flyToBbox(b) {
+  if (!b || !state.map) return;
+  let [w, s, e, n] = b;
+  const pad = 0.02;  // ein einzelner Punkt soll nicht bis ins letzte Haus zoomen
+  if (e - w < pad) { w -= pad; e += pad; }
+  if (n - s < pad) { s -= pad; n += pad; }
+  const narrow = window.innerWidth < 720;
+  state.map.fitBounds([[w, s], [e, n]], { padding: narrow ? { top: 140, bottom: window.innerHeight * 0.62, left: 30, right: 30 }
+                                                          : { top: 110, bottom: 60, left: 60, right: 460 },
+                                          maxZoom: state.styleOnline ? 13 : 6, duration: 1800 });
+}
+
+// Land oder Ort: hinfliegen und die Galerie öffnen
+async function openWhere(cc, place) {
+  const q = filterQuery();
+  q.set("cc", cc);
+  if (place) q.set("place", place);
+  try {
+    const r = await api(`photos/where?${q}`);
+    if (window.innerWidth < 720) $("stats").classList.add("hidden");
+    flyToBbox(r.bbox);
+    openPanel(r.ids, null, null, r.count);
+  } catch (e) { notice(esc(e.message)); setTimeout(() => notice(""), 4000); }
+}
+
+const search = { timer: null, hits: [], sel: -1, seq: 0 };
+function renderHits() {
+  const box = $("searchHits");
+  if (!$("search").value.trim()) { box.classList.add("hidden"); return; }
+  box.innerHTML = search.hits.length
+    ? search.hits.map((h, i) => `<button role="option" data-i="${i}" class="${i === search.sel ? "sel" : ""}">
+        <span>${h.type === "country" ? flag(h.cc) : "📍"} ${esc(h.label)}</span><span class="muted small">${nf.format(h.count)}</span></button>`).join("")
+    : '<div class="empty">Kein Ort mit deinen Fotos gefunden</div>';
+  box.classList.remove("hidden");
+  $$("#searchHits button").forEach(b => b.addEventListener("mousedown", (e) => { e.preventDefault(); pickHit(Number(b.dataset.i)); }));
+}
+function pickHit(i) {
+  const h = search.hits[i];
+  if (!h) return;
+  $("searchHits").classList.add("hidden");
+  $("search").value = h.label;
+  $("search").blur();
+  openWhere(h.cc, h.type === "place" ? h.place : null);
+}
+$("search").addEventListener("input", () => {
+  clearTimeout(search.timer);
+  const q = $("search").value.trim();
+  if (!q) { search.hits = []; renderHits(); return; }
+  search.timer = setTimeout(async () => {
+    const seq = ++search.seq;
+    const params = filterQuery(); params.set("q", q);
+    try { const hits = await api(`search?${params}`); if (seq === search.seq) { search.hits = hits; search.sel = hits.length ? 0 : -1; renderHits(); } }
+    catch (e) { /* z. B. lokales Admin-Konto */ }
+  }, 220);
+});
+$("search").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (!search.hits.length) return;
+    search.sel = (search.sel + (e.key === "ArrowDown" ? 1 : -1) + search.hits.length) % search.hits.length;
+    renderHits();
+  } else if (e.key === "Enter") { e.preventDefault(); pickHit(Math.max(0, search.sel)); }
+  else if (e.key === "Escape") { $("search").value = ""; search.hits = []; renderHits(); }
+});
+$("search").addEventListener("blur", () => setTimeout(() => $("searchHits").classList.add("hidden"), 150));
+$("search").addEventListener("focus", () => { if (search.hits.length) renderHits(); });
+
+async function loadStats() {
+  const body = $("statsBody");
+  let s;
+  try { s = await api(`stats?${filterQuery()}`); }
+  catch (e) { body.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  const filt = [state.yearFrom || state.yearTo ? `${state.yearFrom || "…"}–${state.yearTo || "…"}` : "",
+                state.scope === "p" ? "nur meine" : state.scope === "s" ? "nur gemeinsame" : ""].filter(Boolean).join(", ");
+  $("statsSub").textContent = filt ? `Filter: ${filt}` : "alle Fotos mit Aufnahmeort";
+  const maxY = Math.max(1, ...s.years.map(y => y.count));
+  const maxC = Math.max(1, ...s.countries.map(c => c.count));
+  const yearOn = (y) => (!state.yearFrom || y >= state.yearFrom) && (!state.yearTo || y <= state.yearTo);
+  body.innerHTML = `
+    <div class="kpis">
+      <div><b>${nf.format(s.countries.length)}</b>${s.countries.length === 1 ? "Land" : "Länder"}</div>
+      <div><b>${nf.format(s.places)}</b>Ort${s.places === 1 ? "" : "e"}</div>
+      <div><b>${nf.format(s.photos - s.videos)}</b>Fotos mit Ort</div>
+      <div><b>${nf.format(s.videos)}</b>Video${s.videos === 1 ? "" : "s"} mit Ort</div>
+    </div>
+    <label class="inline small" style="margin-top:10px"><input type="checkbox" id="visitedToggle"${showVisited() ? " checked" : ""}> Besuchte Länder auf dem Globus einfärben</label>
+    ${s.years.length ? `<h3>Fotos pro Jahr</h3>
+      <div class="bars">${s.years.map(y => `<button data-y="${y.year}" class="${state.yearFrom === y.year && state.yearTo === y.year ? "on" : yearOn(y.year) ? "" : "off"}"
+        style="height:${Math.max(3, Math.round(y.count / maxY * 100))}%" title="${y.year}: ${nf.format(y.count)} – klicken, um nur dieses Jahr zu zeigen"><span>${y.count >= maxY * 0.5 ? nf.format(y.count) : ""}</span></button>`).join("")}</div>
+      <div class="barLabels">${s.years.map((y, i) => `<span>${s.years.length <= 12 || i % Math.ceil(s.years.length / 8) === 0 ? "’" + String(y.year).slice(2) : ""}</span>`).join("")}</div>` : ""}
+    ${s.top_places.length ? `<h3>Top-Orte</h3><div class="rows">${s.top_places.map(p => `<button data-cc="${esc(p.cc)}" data-place="${esc(p.place)}">
+        <span class="flag">📍</span><span class="name">${esc(p.label)}</span><span class="n">${nf.format(p.count)}</span></button>`).join("")}</div>` : ""}
+    ${s.countries.length ? `<h3>Länder</h3><div class="rows">${s.countries.map(c => `<button data-cc="${esc(c.cc)}">
+        <span class="flag">${flag(c.cc)}</span><span class="name">${esc(c.name)}</span><span class="n">${nf.format(c.count)} · ${c.places} Ort${c.places === 1 ? "" : "e"}</span></button>
+        <div class="meter" style="width:calc((100% - 38px) * ${(c.count / maxC).toFixed(3)})"></div>`).join("")}</div>` :
+      '<p class="muted">Noch keine Fotos mit Ortsnamen. Die Namen kommen nach der nächsten Suche dazu.</p>'}
+    <p class="muted small" style="margin-top:14px">Ortsnamen: <a href="https://www.geonames.org" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0), offline auf der NAS.</p>`;
+  $("visitedToggle").addEventListener("change", () => { store.set("fg_visited", $("visitedToggle").checked ? "1" : "0"); updateVisited(); });
+  $$("#statsBody .bars button").forEach(b => b.addEventListener("click", () => {
+    const y = Number(b.dataset.y);
+    const only = state.yearFrom === y && state.yearTo === y;
+    state.yearFrom = only ? null : y; state.yearTo = only ? null : y;
+    fillYears(state.years || []);
+    applyFilter();
+  }));
+  $$("#statsBody .rows button").forEach(b => b.addEventListener("click", () => openWhere(b.dataset.cc, b.dataset.place || null)));
+}
+$("statsBtn").addEventListener("click", () => {
+  const box = $("stats");
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) { if (window.innerWidth < 720) $("panel").classList.add("hidden"); loadStats(); }
+});
+$("statsClose").addEventListener("click", () => $("stats").classList.add("hidden"));
 
 // ---------- los ----------
 loadBranding();

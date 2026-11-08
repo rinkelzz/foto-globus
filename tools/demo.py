@@ -89,6 +89,25 @@ def main():
             for size, dims in (("SM", (240, 180)), ("M", (320, 240)), ("XL", (1280, 960))):
                 with open(os.path.join(eadir, f"SYNOFOTO_THUMB_{size}.jpg"), "wb") as f:
                     f.write(picture(name, label, dims, n))
+    # ein paar Videos (braucht ffmpeg; ohne ffmpeg geht es auch ohne Videos)
+    import shutil
+    import subprocess
+    if shutil.which("ffmpeg"):
+        for k, (name, lat, lon, year, personal) in enumerate([("Reykjavík", 64.1466, -21.9426, 2021, True),
+                                                            ("Palma de Mallorca", 39.5696, 2.6502, 2024, False),
+                                                            ("Tokio", 35.6595, 139.7005, 2025, True)]):
+            base = os.path.join(vol, "homes", "anna", "Photos", str(year), name) if personal else os.path.join(vol, "photo", "Reisen", str(year), name)
+            fname = f"VID_{k + 1:04d}.mp4"
+            path = os.path.join(base, fname)
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=25:duration=6",
+                            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                            "-metadata", f"location={lat:+08.4f}{lon:+09.4f}/", "-metadata", f"creation_time={year}-08-0{k + 1}T12:00:00Z",
+                            "-movflags", "+faststart", path], check=True)
+            eadir = os.path.join(base, "@eaDir", fname)
+            os.makedirs(eadir, exist_ok=True)
+            for size, dims in (("SM", (240, 135)), ("M", (320, 180)), ("XL", (1280, 720))):
+                with open(os.path.join(eadir, f"SYNOFOTO_THUMB_{size}.jpg"), "wb") as f:
+                    f.write(picture(name, "Video", dims, 900 + k))
     conn = connect()
     try:
         set_setting(conn, "share_access", "all")

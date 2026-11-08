@@ -22,8 +22,10 @@ VAR = os.environ.get("FG_PKG_VAR", "/var/packages/%s/var" % PKG)
 AUTH_CGI = os.environ.get("FG_AUTH_CGI", "/usr/syno/synoman/webman/modules/authenticate.cgi")
 ID_CMD = os.environ.get("FG_ID_CMD", "id")
 USER_RE = re.compile(r"^[A-Za-z0-9._@\-\\ ]{1,64}$")
-PASS_HEADERS = ("CONTENT_TYPE", "HTTP_ACCEPT", "HTTP_ACCEPT_ENCODING", "HTTP_ACCEPT_LANGUAGE", "HTTP_X_SESSION_TOKEN")
-RETURN_HEADERS = ("content-type", "content-encoding", "content-disposition", "cache-control", "etag", "last-modified", "vary")
+PASS_HEADERS = ("CONTENT_TYPE", "HTTP_ACCEPT", "HTTP_ACCEPT_ENCODING", "HTTP_ACCEPT_LANGUAGE", "HTTP_X_SESSION_TOKEN",
+                "HTTP_RANGE", "HTTP_IF_RANGE")
+RETURN_HEADERS = ("content-type", "content-encoding", "content-disposition", "cache-control", "etag", "last-modified", "vary",
+                  "content-length", "content-range", "accept-ranges")
 
 
 def out(status, headers, body=b""):
@@ -118,7 +120,6 @@ def main():
         conn = http.client.HTTPConnection("127.0.0.1", port(), timeout=60)
         conn.request(method, path, body=body, headers=headers)
         resp = conn.getresponse()
-        data = resp.read()
     except OSError as e:
         return fail("502 Bad Gateway", "Foto-Globus nicht erreichbar – läuft das Paket? (%s)" % e)
     hdrs = [(k, v) for k, v in resp.getheaders() if k.lower() in RETURN_HEADERS and k.lower() != "cache-control"]
@@ -126,7 +127,18 @@ def main():
         hdrs += [("Cache-Control", "no-store, no-cache, must-revalidate"), ("Pragma", "no-cache"), ("Expires", "0")]
     else:
         hdrs += [(k, v) for k, v in resp.getheaders() if k.lower() == "cache-control"]
-    out("%d %s" % (resp.status, resp.reason), hdrs, data)
+    # in Stücken weiterreichen statt alles in den Speicher zu laden (Videos, Originale)
+    out("%d %s" % (resp.status, resp.reason), hdrs)
+    w = sys.stdout.buffer
+    try:
+        while True:
+            chunk = resp.read(256 * 1024)
+            if not chunk:
+                break
+            w.write(chunk)
+            w.flush()
+    except (OSError, http.client.HTTPException):
+        pass  # Browser hat abgebrochen (z. B. beim Spulen im Video)
 
 
 if __name__ == "__main__":

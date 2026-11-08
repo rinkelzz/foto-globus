@@ -274,3 +274,86 @@ def test_symlinks_are_never_served(library, acl):
     from app import exif
     with pytest.raises(OSError):
         exif.read_photo(ben_photo)
+
+
+def test_places_stats_search_where(library, acl):
+    from .photofiles import make_video
+    write(f"{PHOTO}/Urlaub/Mallorca/IMG_5.jpg", make_jpeg(lat=39.571, lon=2.651, taken="2023:06:01 12:00:00"))
+    write(f"{HOMES}/anna/Photos/clip.MOV", make_video(lat=39.5696, lon=2.6502))
+    r = scanner.run("manuell")
+    assert r["status"] == "fertig"
+    with connect() as conn:
+        row = conn.execute("SELECT place, cc, geocoded FROM photos WHERE name = 'IMG_1.jpg'").fetchone()
+        assert (row["place"], row["cc"], row["geocoded"]) == ("Palma", "ES", 1)
+        vid = conn.execute("SELECT * FROM photos WHERE name = 'clip.MOV'").fetchone()
+        assert vid["media"] == "video" and vid["duration"] == 12.5 and vid["owner"] == "anna"
+    acl.write_text(f"{PHOTO}/Familie/geheim anna\n")
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+        h = sso("anna")
+        pts = c.get("/api/v1/points", headers=h).json()["points"]
+        assert {p[6] for p in pts} == {"f", "v"} and "ES" in {p[7] for p in pts}
+
+        s = c.get("/api/v1/stats", headers=h).json()
+        names = [x["name"] for x in s["countries"]]
+        assert names[0] == "Spanien" and "Deutschland" not in names        # Berlin-Foto ist für anna gesperrt
+        assert s["countries"][0]["count"] == 3 and s["videos"] == 1
+        assert s["top_places"][0]["label"] == "Palma, Spanien" and s["top_places"][0]["count"] == 3
+        assert {y["year"] for y in s["years"]} >= {2019, 2023, 2024}
+        assert set(s["visited"]) == {"ES", "BR", "FR"}
+        only_mine = c.get("/api/v1/stats", params={"scope": "p"}, headers=h).json()
+        assert set(only_mine["visited"]) == {"ES", "FR"}
+        y23 = c.get("/api/v1/stats", params={"year_from": 2023, "year_to": 2023}, headers=h).json()
+        assert y23["photos"] == 1
+
+        hits = c.get("/api/v1/search", params={"q": "spa"}, headers=h).json()
+        assert hits[0]["type"] == "country" and hits[0]["label"] == "Spanien" and hits[0]["count"] == 3
+        assert c.get("/api/v1/search", params={"q": "palm"}, headers=h).json()[0]["label"] == "Palma, Spanien"
+        assert c.get("/api/v1/search", params={"q": "Rio"}, headers=h).json()[0]["cc"] == "BR"
+        assert c.get("/api/v1/search", params={"q": "berl"}, headers=h).json() == []     # gesperrt → kein Treffer
+        assert c.get("/api/v1/search", params={"q": "deutsch"}, headers=h).json() == []
+
+        w = c.get("/api/v1/photos/where", params={"cc": "ES", "place": "Palma"}, headers=h).json()
+        assert w["count"] == 3 and w["label"] == "Palma, Spanien" and len(w["bbox"]) == 4
+        assert c.get("/api/v1/photos/where", params={"cc": "DE"}, headers=h).status_code == 404
+        info = c.post("/api/v1/photos/info", json={"ids": w["ids"]}, headers=h).json()
+        assert {i["place_label"] for i in info} == {"Palma, Spanien"} and {i["media"] for i in info} == {"photo", "video"}
+
+
+def test_video_playback_range_and_token(library, acl):
+    from .photofiles import make_video
+    clip = write(f"{HOMES}/anna/Photos/clip.mp4", make_video(lat=1.3, lon=103.8, apple=False))
+    scanner.run("manuell")
+    with connect() as conn:
+        vid = conn.execute("SELECT id FROM photos WHERE name = 'clip.mp4'").fetchone()["id"]
+        img = conn.execute("SELECT id FROM photos WHERE name = 'anna.png'").fetchone()["id"]
+    raw = open(clip, "rb").read()
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+        h = sso("anna")
+        r = c.get(f"/api/v1/photos/{vid}/video", headers={**h, "Range": "bytes=0-9"})
+        assert r.status_code == 206 and r.content == raw[:10] and r.headers["content-type"] == "video/mp4"
+        t = c.get(f"/api/v1/photos/{vid}/video-token", headers=h).json()
+        assert t["playable"] and t["source"] == "original"
+        # mit Schlüssel geht es ohne jede Anmeldung – aber nur für dieses Video
+        assert c.get(f"/api/v1/photos/{vid}/video", params={"vt": t["token"]}).content == raw
+        assert c.get(f"/api/v1/photos/{img}/video", params={"vt": t["token"]}).status_code == 404
+        assert c.get(f"/api/v1/photos/{vid}/video", params={"vt": t["token"][:-2] + "00"}).status_code == 404
+        assert c.get(f"/api/v1/photos/{vid}/video").status_code == 404           # ohne alles
+        assert c.get(f"/api/v1/photos/{vid}/video", headers=sso("ben")).status_code == 404   # fremdes Video
+        assert c.get(f"/api/v1/photos/{img}/video-token", headers=h).status_code == 404
+        # Synologys kleinere Fassung wird bevorzugt
+        film = write(os.path.join(os.path.dirname(clip), "@eaDir", "clip.mp4", "SYNOFOTO_FILM_M.mp4"), b"klein")
+        assert c.get(f"/api/v1/photos/{vid}/video", headers=h).content == b"klein"
+        os.remove(film)
+        os.symlink(library["ben"], film)   # Link auf fremde Datei → wird ignoriert, Original kommt
+        assert c.get(f"/api/v1/photos/{vid}/video", headers=h).content == raw
+
+
+def test_expired_video_token():
+    from app.routers.photos import check_video_token, make_video_token
+    tok = make_video_token("anna", 7, now=1000)
+    assert check_video_token(tok, 7, now=1001) == "anna"
+    assert check_video_token(tok, 7, now=1000 + 5 * 3600) is None
+    assert check_video_token(tok, 8, now=1001) is None
+    assert check_video_token("kaputt", 7) is None
+    dotted = make_video_token("vor.name", 7, now=1000)
+    assert check_video_token(dotted, 7, now=1001) == "vor.name"

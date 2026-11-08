@@ -48,6 +48,33 @@ def synology_thumb(path: str, size: str) -> Optional[str]:
     return None
 
 
+# Von Synology Photos umgerechnete, kleinere Videofassungen (Name je nach Version unterschiedlich)
+FILM_PREFERENCE = ("SYNOFOTO_FILM_M", "SYNOPHOTO_FILM_M", "SYNOFOTO_FILM_H264", "SYNOFOTO_FILM_MOBILE",
+                   "SYNOPHOTO_FILM_MOBILE", "SYNOFOTO_FILM_H", "SYNOPHOTO_FILM_H")
+PLAYABLE = {".mp4", ".m4v", ".mov"}
+
+
+def video_file(path: str, root: str) -> Tuple[Optional[str], str]:
+    """(Datei zum Abspielen, Herkunft „synology“ | „original“) – bevorzugt die kleinere Fassung von Synology."""
+    if not inside(path, root):
+        return None, ""
+    folder, name = os.path.split(path)
+    base = os.path.join(folder, "@eaDir", name)
+    try:
+        films = {os.path.splitext(f)[0]: f for f in os.listdir(base) if f.upper().endswith(".MP4") and "FILM" in f.upper()}
+    except OSError:
+        films = {}
+    for pref in FILM_PREFERENCE:
+        if pref in films and inside(os.path.join(base, films[pref]), base):
+            return os.path.join(base, films[pref]), "synology"
+    for f in sorted(films.values()):
+        if inside(os.path.join(base, f), base):
+            return os.path.join(base, f), "synology"
+    if os.path.splitext(name)[1].lower() in PLAYABLE:
+        return path, "original"
+    return None, ""
+
+
 def find(path: str, size: str, root: str) -> Tuple[Optional[str], Optional[bytes], str]:
     """(Datei, Bytes, Medientyp) – entweder ein Pfad zum Ausliefern oder fertige Bytes.
 

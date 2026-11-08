@@ -32,6 +32,10 @@
 
   <header class="topbar">
     <div class="brand"><span class="brandIcon">🌍</span><img class="brandLogo hidden" alt=""><b class="brandName">Foto-Globus</b></div>
+    <div class="searchBox" role="search">
+      <input id="search" type="search" placeholder="Ort oder Land suchen …" autocomplete="off" aria-label="Ort oder Land suchen">
+      <div id="searchHits" class="searchHits hidden" role="listbox"></div>
+    </div>
     <div class="filters">
       <span class="chip" id="countChip">…</span>
       <label class="yearSel" title="Zeitraum">
@@ -46,12 +50,22 @@
       </div>
     </div>
     <div class="tools">
+      <button id="statsBtn" title="Statistik" aria-label="Statistik">📊</button>
       <button id="homeBtn" title="Ganze Welt zeigen" aria-label="Ganze Welt zeigen">⟲</button>
       <button id="menuBtn" title="Menü" aria-label="Menü">☰</button>
     </div>
   </header>
 
   <div id="notice" class="notice hidden"></div>
+
+  <!-- Statistik -->
+  <aside id="stats" class="panel left hidden" aria-label="Statistik">
+    <div class="panelHead">
+      <div><b>Meine Welt</b><div class="muted small" id="statsSub"></div></div>
+      <button id="statsClose" class="icon" aria-label="Schließen">✕</button>
+    </div>
+    <div id="statsBody" class="panelBody"></div>
+  </aside>
 
   <!-- Galerie einer Pinnadel -->
   <aside id="panel" class="panel hidden" aria-label="Fotos an diesem Ort">
@@ -85,6 +99,8 @@
   <button class="lbNav prev" id="lbPrev" aria-label="Vorheriges Foto">‹</button>
   <figure>
     <img id="lbImg" alt="">
+    <video id="lbVideo" class="hidden" controls playsinline preload="metadata"></video>
+    <div id="lbVideoMsg" class="lbMsg hidden"></div>
     <figcaption>
       <div><b id="lbName"></b> <span class="muted" id="lbPos"></span></div>
       <div class="muted small" id="lbMeta"></div>

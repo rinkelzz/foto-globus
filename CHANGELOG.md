@@ -2,7 +2,21 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.2.0] – 2026-11-08
+
+### Neu
+- **Ortsnamen** wie „Palma, Spanien“ – offline aus GeoNames (alle Orte ab 1.000 Einwohnern), nichts verlässt die NAS.
+  Bekannte Orte heißen deutsch (München, Rom, Tokio, Kapstadt …), Stadtteile verlieren gegen die Großstadt
+  („New York“ statt „Hell's Kitchen“), abgelegene Orte bekommen wenigstens das Land. Vorhandene Fotos erhalten ihre
+  Ortsnamen nach dem Update automatisch.
+- **Suche nach Ort oder Land** oben im Globus: Treffer fliegen hin und öffnen die Galerie.
+- **Statistik „Meine Welt“** (📊): Länder, Orte, Fotos und Videos, Balken pro Jahr (Klick filtert), Top-Orte und
+  Länderliste – jeweils mit Klick zum Hinfliegen. Berücksichtigt die gesetzten Filter.
+- **Besuchte Länder** werden auf dem Globus eingefärbt (abschaltbar).
+- **Videos** (MP4, MOV, M4V, 3GP): Aufnahmeort und -zeit von iPhone, Android und Kameras (`©xyz`, Apple-Metadaten,
+  3GPP `loci`), Vorschaubild mit ▶ und Länge, **Abspielen in der Großansicht** mit Spulen. Verwendet Synologys
+  kleinere Videofassung, wenn vorhanden.
+- Galerie zeigt den Ortsnamen als Titel und Fotos/Videos getrennt gezählt.
 
 ### Geändert
 - Anleitung zu den Ordnerrechten (README, Installations-Assistent, Einstellungen) an die Begriffe in DSM angepasst:
@@ -27,4 +41,5 @@ Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versi
 - DSM-Fenster mit Single Sign-on, Anmeldung mit DSM-Konto (inkl. 2FA), vier Designs, Firmenname und Logo,
   nächtliche Sicherung mit Wiederherstellen, Änderungsprotokoll, Updates übers Paket-Zentrum, Port änderbar.
 
+[0.2.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.1.0
