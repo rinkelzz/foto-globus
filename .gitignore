@@ -7,7 +7,7 @@ venv/
 *.egg-info/
 
 # Laufzeitdaten (Datenbank, Startpasswort) – nie einchecken
-data/
+/data/
 *.db
 *.db-wal
 *.db-shm
