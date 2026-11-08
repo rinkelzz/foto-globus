@@ -1,0 +1,26 @@
+
+# --- postinst: Konfiguration aus dem Assistenten schreiben, Datenbank + Admin anlegen
+
+mkdir -p "${PKGVAR}"
+
+if [ ! -f "${CONFIG}" ]; then
+    {
+        echo "# Foto-Globus – Einstellungen. Nach Änderungen das Paket neu starten."
+        echo "FG_PORT=8790"
+        echo "FG_PUBLIC_URL=\"${wizard_public_url:-}\""
+        echo "FG_ROOT_PATH=\"\""
+        echo "FG_COOKIE_SECURE=0"
+        echo "FG_TIMEZONE=\"Europe/Berlin\""
+    } > "${CONFIG}"
+fi
+
+set -- $(find_python)
+PY="$1"; TAG="$2"
+if [ -n "$PY" ]; then
+    # Admin-Passwort wird nur hier verwendet und nirgends gespeichert
+    FG_DATA_DIR="${PKGVAR}" FG_ADMIN_PASSWORD="${wizard_admin_password:-}" \
+    PYTHONPATH="$(lib_path "$PY" "$TAG")" PYTHONDONTWRITEBYTECODE=1 \
+        "$PY" -c "from app.db import init_db; init_db()" >> "${LOGFILE}" 2>&1
+    log "Installation abgeschlossen (${PY})"
+fi
+exit 0

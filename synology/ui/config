@@ -1,0 +1,24 @@
+{
+    "FotoGlobus.js": {
+        "SYNO.SDS.FotoGlobus.Application": {
+            "type": "app",
+            "title": "Foto-Globus",
+            "desc": "Fotos auf der Weltkugel",
+            "icon": "images/icon_{0}.png",
+            "texts": "texts",
+            "allUsers": true,
+            "allowMultiInstance": false,
+            "appWindow": "SYNO.SDS.FotoGlobus.AppWindow",
+            "grantPrivilege": "all",
+            "advanceGrantPrivilege": true,
+            "depend": ["SYNO.SDS.FotoGlobus.AppWindow"]
+        },
+        "SYNO.SDS.FotoGlobus.AppWindow": {
+            "type": "lib",
+            "title": "Foto-Globus",
+            "icon": "images/icon_{0}.png",
+            "texts": "texts",
+            "depend": []
+        }
+    }
+}

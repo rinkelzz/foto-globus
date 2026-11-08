@@ -1,0 +1,10 @@
+[
+    {
+        "step_title": "Foto-Globus deinstallieren",
+        "items": [
+            {
+                "desc": "Beim Deinstallieren werden Index, Einstellungen und Sicherungen im Paketordner gelöscht. <b>Deine Fotos bleiben unverändert</b> – der Foto-Globus liest sie nur. Für ein Update einfach die neue SPK-Datei installieren, dabei bleibt alles erhalten."
+            }
+        ]
+    }
+]

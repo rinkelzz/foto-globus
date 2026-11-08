@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="static/icon.png">
+<link rel="apple-touch-icon" href="static/icon.png">
+<title>Foto-Globus</title>
+<script src="static/theme.js?v={{v}}"></script>
+<link rel="stylesheet" href="static/vendor/maplibre-gl.css?v={{v}}">
+<link rel="stylesheet" href="static/app.css?v={{v}}">
+</head>
+<body>
+
+<!-- Anmeldung (nur außerhalb des DSM-Fensters) -->
+<section id="loginView" class="hidden">
+  <form class="login card" id="loginForm" autocomplete="on">
+    <div class="brand"><span class="brandIcon">🌍</span><img class="brandLogo hidden" alt=""><b class="brandName">Foto-Globus</b></div>
+    <p class="muted small">Mit deinem DSM-Konto anmelden.</p>
+    <label>Benutzername <input id="lu" autocomplete="username" required></label>
+    <label>Passwort <input id="lp" type="password" autocomplete="current-password" required></label>
+    <label id="otpWrap" class="hidden">Zwei-Faktor-Code <input id="lo" inputmode="numeric" autocomplete="one-time-code" maxlength="12"></label>
+    <button class="primary" type="submit">Anmelden</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</section>
+
+<!-- Hauptansicht: Globus -->
+<section id="appView" class="hidden">
+  <div id="map" aria-label="Weltkugel mit Fotos"></div>
+
+  <header class="topbar">
+    <div class="brand"><span class="brandIcon">🌍</span><img class="brandLogo hidden" alt=""><b class="brandName">Foto-Globus</b></div>
+    <div class="filters">
+      <span class="chip" id="countChip">…</span>
+      <label class="yearSel" title="Zeitraum">
+        <select id="yearFrom" aria-label="Von Jahr"></select>
+        <span>–</span>
+        <select id="yearTo" aria-label="Bis Jahr"></select>
+      </label>
+      <div class="seg" role="group" aria-label="Bereich">
+        <button data-scope="all" class="on">Alle</button>
+        <button data-scope="p"><i class="dot me"></i>Meine</button>
+        <button data-scope="s"><i class="dot sh"></i>Gemeinsam</button>
+      </div>
+    </div>
+    <div class="tools">
+      <button id="homeBtn" title="Ganze Welt zeigen" aria-label="Ganze Welt zeigen">⟲</button>
+      <button id="menuBtn" title="Menü" aria-label="Menü">☰</button>
+    </div>
+  </header>
+
+  <div id="notice" class="notice hidden"></div>
+
+  <!-- Galerie einer Pinnadel -->
+  <aside id="panel" class="panel hidden" aria-label="Fotos an diesem Ort">
+    <div class="panelHead">
+      <div>
+        <b id="panelTitle">Fotos</b>
+        <div class="muted small" id="panelSub"></div>
+      </div>
+      <div class="row">
+        <button id="zoomHere" class="mini" title="Hineinzoomen">🔍 Hineinzoomen</button>
+        <button id="panelClose" class="icon" aria-label="Schließen">✕</button>
+      </div>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div id="gridMore" class="muted small center"></div>
+  </aside>
+
+  <!-- Menü -->
+  <div id="menu" class="menu hidden">
+    <div class="muted small" id="who"></div>
+    <button data-open="profile">🎨 Design</button>
+    <button data-open="settings" class="admin">⚙️ Einstellungen</button>
+    <button id="logoutBtn">↩ Abmelden</button>
+    <div class="muted small" id="version"></div>
+  </div>
+</section>
+
+<!-- Großansicht -->
+<div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
+  <button class="lbClose icon" id="lbClose" aria-label="Schließen">✕</button>
+  <button class="lbNav prev" id="lbPrev" aria-label="Vorheriges Foto">‹</button>
+  <figure>
+    <img id="lbImg" alt="">
+    <figcaption>
+      <div><b id="lbName"></b> <span class="muted" id="lbPos"></span></div>
+      <div class="muted small" id="lbMeta"></div>
+      <div class="row">
+        <button class="mini" id="lbMap">📍 Auf dem Globus zeigen</button>
+        <button class="mini" id="lbDownload">⬇ Original herunterladen</button>
+      </div>
+    </figcaption>
+  </figure>
+  <button class="lbNav next" id="lbNext" aria-label="Nächstes Foto">›</button>
+</div>
+
+<!-- Dialoge -->
+<div id="dialog" class="dialog hidden" role="dialog" aria-modal="true">
+  <div class="dialogBox card">
+    <div class="toolbar"><h2 id="dialogTitle"></h2><button class="icon" id="dialogClose" aria-label="Schließen">✕</button></div>
+    <div id="dialogBody"></div>
+  </div>
+</div>
+
+<script src="static/vendor/maplibre-gl.js?v={{v}}"></script>
+<script src="static/app.js?v={{v}}"></script>
+</body>
+</html>

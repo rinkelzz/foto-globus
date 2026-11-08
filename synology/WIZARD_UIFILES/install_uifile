@@ -1,0 +1,42 @@
+[
+    {
+        "step_title": "Foto-Globus einrichten",
+        "items": [
+            {
+                "type": "password",
+                "desc": "Passwort für das lokale Konto <b>admin</b> des Foto-Globus (mindestens 8 Zeichen). Damit verwaltest du die Einstellungen, falls die Anmeldung mit DSM-Konten nicht klappt. Fotos siehst du immer mit deinem DSM-Konto.",
+                "subitems": [
+                    {
+                        "key": "wizard_admin_password",
+                        "desc": "Admin-Passwort",
+                        "validator": {
+                            "allowBlank": false,
+                            "minLength": 8
+                        }
+                    }
+                ]
+            },
+            {
+                "type": "textfield",
+                "desc": "Adresse, unter der der Foto-Globus von außen erreichbar ist (Reverse Proxy), z. B. https://fotos.meinedomain.de. Leer lassen, wenn noch nicht eingerichtet – das lässt sich später ändern.",
+                "subitems": [
+                    {
+                        "key": "wizard_public_url",
+                        "desc": "Öffentliche Adresse",
+                        "emptyText": "https://fotos.meinedomain.de",
+                        "validator": {
+                            "allowBlank": true,
+                            "regex": {
+                                "expr": "/^(https?:\\/\\/[^\\s\\/]+(\\/[^\\s]*)?)?$/",
+                                "errorText": "Bitte mit http:// oder https:// beginnen"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "desc": "<b>Wichtig:</b> Damit der Foto-Globus deine Fotos findet, gib ihm nach der Installation Leserechte: Systemsteuerung → Freigegebener Ordner → <b>photo</b> (und für persönliche Fotos <b>homes</b>) → Bearbeiten → Berechtigungen → oben „System-interner Benutzer“ wählen → <b>fotoglobus</b> → Lesen."
+            }
+        ]
+    }
+]
