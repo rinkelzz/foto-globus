@@ -35,7 +35,7 @@
                 ]
             },
             {
-                "desc": "<b>Wichtig:</b> Damit der Foto-Globus deine Fotos findet, gib ihm nach der Installation Leserechte: Systemsteuerung → Freigegebener Ordner → <b>photo</b> (und für persönliche Fotos <b>homes</b>) → Bearbeiten → Berechtigungen → oben „System-interner Benutzer“ wählen → <b>fotoglobus</b> → Lesen."
+                "desc": "<b>Wichtig:</b> Damit der Foto-Globus deine Fotos findet, gib ihm nach der Installation Leserechte: Systemsteuerung → Freigegebener Ordner → <b>photo</b> (und für persönliche Fotos <b>homes</b>) → Bearbeiten → Berechtigungen → oben „Interner Systembenutzer“ wählen → bei <b>fotoglobus</b> den Haken bei <b>Schreibgeschützt</b> setzen (das heißt: nur lesen)."
             }
         ]
     }

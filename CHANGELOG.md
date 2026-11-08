@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Geändert
+- Anleitung zu den Ordnerrechten (README, Installations-Assistent, Einstellungen) an die Begriffe in DSM angepasst:
+  „Interner Systembenutzer“ → bei `fotoglobus` **Schreibgeschützt** (= nur lesen).
+- Tests für Python 3.9 laufen auf Ubuntu 22.04 (ubuntu-latest bietet 3.9 nicht mehr an).
+
 ## [0.1.0] – 2026-11-08
 
 ### Neu

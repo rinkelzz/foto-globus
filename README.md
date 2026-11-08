@@ -68,7 +68,8 @@ Ein Paket für alle Modelle: Intel/AMD sowie ARMv8 und ARMv7.
    Konto `admin` vergeben (nur für die Einstellungen, falls die DSM-Anmeldung einmal nicht klappt).
 3. **Leserechte geben** – das ist wichtig, sonst findet der Foto-Globus nichts:
    Systemsteuerung → **Freigegebener Ordner** → `photo` → Bearbeiten → **Berechtigungen** → oben in der Liste
-   **„System-interner Benutzer“** wählen → `fotoglobus` → **Lesen**. Dasselbe für `homes`, wenn auch die
+   **„Interner Systembenutzer“** wählen → bei `fotoglobus` den Haken bei **Schreibgeschützt** setzen → Speichern.
+   („Schreibgeschützt“ heißt in DSM: nur lesen – mehr braucht der Foto-Globus nicht.) Dasselbe für `homes`, wenn auch die
    persönlichen Fotos (`homes/<benutzer>/Photos`) auf den Globus sollen.
 4. Den Foto-Globus im DSM-Hauptmenü öffnen. Direkt nach der Installation sucht er einmal nach Fotos; den Stand
    siehst du als Admin unter **☰ → Einstellungen → Suche**.
@@ -107,7 +108,7 @@ zeigt der Globus eine schlichte Kugel mit Ländergrenzen, die im Paket liegt.
   hinzufügen. Danach bietet das Paket-Zentrum neue Versionen selbst an.
 - **Sicherung:** Jede Nacht (Uhrzeit einstellbar) – im Paketordner (die letzten 7) und auf Wunsch in einem
   freigegebenen Ordner wie `/volume1/backup/fotoglobus`, den Hyper Backup mitsichern kann. Der Paketbenutzer
-  `fotoglobus` braucht dort Schreibrechte. Gesichert werden Index, Einstellungen und Benutzer – die Fotos selbst
+  `fotoglobus` braucht dort **Lesen/Schreiben** (Berechtigungen → „Interner Systembenutzer“). Gesichert werden Index, Einstellungen und Benutzer – die Fotos selbst
   sichert Hyper Backup über die Fotoordner.
 - **Port:** unter **Karte & Anmeldung → Port** ändern; gilt nach dem Neustart des Pakets (Paket-Zentrum → Stoppen →
   Ausführen). Reverse Proxy und Firewall ggf. anpassen.

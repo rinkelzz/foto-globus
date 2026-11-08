@@ -45,7 +45,7 @@ def test_dir_validation(admin, tmp_path):
     try:
         if os.geteuid() != 0:  # root darf überall schreiben
             r = admin.patch("/api/v1/backups/settings", json={"dir": str(locked / "sub")})
-            assert r.status_code == 400 and "System-interner Benutzer" in r.json()["detail"]
+            assert r.status_code == 400 and "Interner Systembenutzer" in r.json()["detail"]
     finally:
         locked.chmod(0o700)
     assert admin.patch("/api/v1/backups/settings", json={"dir": ""}).json()["dir"] == ""

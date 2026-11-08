@@ -580,7 +580,7 @@ async function tabFolders(body) {
         ${chk("sPersonal", s.scan_personal === "1", "Persönliche Fotos aller Benutzer durchsuchen")}
         <label>Ordner der Benutzer-Verzeichnisse <input id="sHomesRoot" value="${esc(s.homes_root)}" placeholder="automatisch: ${esc(s.detected.homes_root || "nicht gefunden")}"></label>
         <p class="muted small">Leer = automatisch (<code>/volume*/photo</code> und <code>/volume*/homes/&lt;benutzer&gt;/Photos</code>).
-          Der Paketbenutzer <b>fotoglobus</b> braucht dafür Leserechte: DSM → Systemsteuerung → Freigegebener Ordner → <i>photo</i> bzw. <i>homes</i> → Bearbeiten → Berechtigungen → „System-interner Benutzer“.</p>
+          Der Paketbenutzer <b>fotoglobus</b> braucht dafür Leserechte: DSM → Systemsteuerung → Freigegebener Ordner → <i>photo</i> bzw. <i>homes</i> → Bearbeiten → Berechtigungen → „Interner Systembenutzer“ → bei <b>fotoglobus</b> den Haken bei <b>Schreibgeschützt</b> setzen.</p>
       </fieldset>
       <fieldset><legend>Nächtliche Suche</legend>
         ${chk("sScanOn", s.scan_enabled === "1", "Jede Nacht nach neuen Fotos suchen")}

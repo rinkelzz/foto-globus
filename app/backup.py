@@ -56,7 +56,7 @@ def check_dir(path: str) -> Path:
     except PermissionError:
         raise BackupError(
             f"Keine Schreibrechte für {p}. In DSM: Systemsteuerung → Freigegebener Ordner → Ordner bearbeiten → "
-            "Berechtigungen → oben „System-interner Benutzer“ wählen → „fotoglobus“ Lesen/Schreiben geben.")
+            "Berechtigungen → oben „Interner Systembenutzer“ wählen → bei „fotoglobus“ Lesen/Schreiben setzen.")
     except OSError as e:
         raise BackupError(f"Ordner nicht nutzbar: {e}")
     return p
