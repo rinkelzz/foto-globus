@@ -169,38 +169,57 @@ function drawPin(label, variant) {
   return { width: w, height: h, data: g.getImageData(0, 0, w, h).data };
 }
 
-async function initMap() {
-  if (state.map) return;
-  let cfg = { style: "" };
-  try { cfg = await api("map-config"); } catch (e) { /* Offline-Kugel */ }
+function esriStyle() {
+  const base = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+  return {
+    version: 8,
+    sources: {
+      sat: { type: "raster", tileSize: 256, maxzoom: 19, tiles: [base + "World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+             attribution: "Satellitenbild: Esri, Maxar, Earthstar Geographics, GIS User Community" },
+      labels: { type: "raster", tileSize: 256, maxzoom: 19, tiles: [base + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"] },
+    },
+    layers: [
+      { id: "space", type: "background", paint: { "background-color": "#0b1220" } },
+      { id: "sat", type: "raster", source: "sat" },
+      { id: "labels", type: "raster", source: "labels", paint: { "raster-opacity": 0.85 } },
+    ],
+  };
+}
+
+async function styleFor(mode) {
+  const cfg = state.mapCfg || {};
+  if (mode === "sat" && cfg.satellite) {
+    if (cfg.satellite.type === "esri") return { style: esriStyle(), online: true, sat: true };
+    const ms = await onlineStyle(cfg.satellite.style);
+    if (ms) return { style: ms, online: true, sat: true };
+  }
   const online = await onlineStyle(cfg.style);
-  state.styleOnline = !!online;
-  const map = new maplibregl.Map({
-    container: "map",
-    style: online || offlineStyle(),
-    center: [10, 30], zoom: window.innerWidth < 720 ? 0.35 : 1.6,
-    attributionControl: { compact: true },
-    renderWorldCopies: false,
-    maxPitch: 60,
-  });
-  state.map = map;
-  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
-  map.on("styleimagemissing", (e) => {
-    const m = /^pin\|(.+)\|([ps])$/.exec(e.id);
-    if (m && !map.hasImage(e.id)) map.addImage(e.id, drawPin(m[1], m[2]), { pixelRatio: 2 });
-  });
-  await new Promise((resolve) => map.on("load", resolve));
+  return { style: online || offlineStyle(), online: !!online, sat: false };
+}
+
+// Eigene Ebenen (Länder, Pins, Route) – nach jedem Stilwechsel neu, die Karte vergisst sie dabei
+function addOverlays() {
+  const map = state.map;
   try { map.setProjection({ type: "globe" }); } catch (e) { /* ältere Browser: flache Karte */ }
-  // Besuchte Länder einfärben: Ländergrenzen aus dem Paket, unter Beschriftungen und Pins
   const worldUrl = new URL(url("static/vendor/world.geojson"), location.href).href;
   let countrySrc = "world";
   if (!map.getSource("world")) { map.addSource("countries", { type: "geojson", data: worldUrl }); countrySrc = "countries"; }
-  const firstSymbol = (map.getStyle().layers || []).find(l => l.type === "symbol");
+  const layers = map.getStyle().layers || [];
+  const below = state.styleSat ? "labels" : (state.styleOnline ? (layers.find(l => l.type === "symbol") || {}).id : undefined);
   map.addLayer({ id: "visited", type: "fill", source: countrySrc, filter: ["in", ["get", "cc"], ["literal", []]],
-                 paint: { "fill-color": accentColor(), "fill-opacity": state.styleOnline ? 0.18 : 0.28 } },
-               state.styleOnline && firstSymbol ? firstSymbol.id : undefined);
+                 paint: { "fill-color": accentColor(), "fill-opacity": state.styleSat ? 0.22 : state.styleOnline ? 0.18 : 0.28 } },
+               below && map.getLayer(below) ? below : undefined);
+  map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({ id: "route-casing", type: "line", source: "route", filter: ["==", ["geometry-type"], "LineString"],
+                 layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#fff", "line-width": 6, "line-opacity": 0.85 } });
+  map.addLayer({ id: "route-line", type: "line", source: "route", filter: ["==", ["geometry-type"], "LineString"],
+                 layout: { "line-join": "round", "line-cap": "round" },
+                 paint: { "line-color": accentColor(), "line-width": 3.5, "line-dasharray": [2, 1.4] } });
+  map.addLayer({ id: "route-stops", type: "circle", source: "route", filter: ["==", ["geometry-type"], "Point"],
+                 paint: { "circle-radius": ["case", ["get", "end"], 7, 5], "circle-color": ["case", ["get", "end"], accentColor(), "#fff"],
+                          "circle-stroke-color": accentColor(), "circle-stroke-width": 2.5 } });
   map.addSource("photos", {
-    type: "geojson", data: { type: "FeatureCollection", features: [] },
+    type: "geojson", data: geojson(state.filtered || []),
     cluster: true, clusterRadius: 46, clusterMaxZoom: 17,
     clusterProperties: { mine: ["+", ["case", ["==", ["get", "s"], "p"], 1, 0]] },
   });
@@ -216,20 +235,68 @@ async function initMap() {
     id: "photo", type: "symbol", source: "photos", filter: ["!", ["has", "point_count"]],
     layout: { "icon-image": ["concat", "pin|1|", ["get", "s"]], "icon-anchor": "bottom", "icon-allow-overlap": true },
   });
+  updateVisited();
+  if (state.routeData) map.getSource("route").setData(state.routeData);
+}
+
+async function initMap() {
+  if (state.map) return;
+  try { state.mapCfg = await api("map-config"); } catch (e) { state.mapCfg = { style: "" }; }
+  const mode = state.mapCfg.satellite && store.get("fg_map") === "sat" ? "sat" : "map";
+  const st = await styleFor(mode);
+  state.styleOnline = st.online; state.styleSat = st.sat;
+  $("mapBtn").classList.toggle("hidden", !state.mapCfg.satellite);
+  setMapBtn();
+  const map = new maplibregl.Map({
+    container: "map",
+    style: st.style,
+    center: [10, 30], zoom: window.innerWidth < 720 ? 0.35 : 1.6,
+    attributionControl: { compact: true },
+    renderWorldCopies: false,
+    maxPitch: 60,
+  });
+  state.map = map;
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
+  map.on("styleimagemissing", (e) => {
+    const m = /^pin\|(.+)\|([ps])$/.exec(e.id);
+    if (m && !map.hasImage(e.id)) map.addImage(e.id, drawPin(m[1], m[2]), { pixelRatio: 2 });
+  });
+  await new Promise((resolve) => map.on("load", resolve));
+  addOverlays();
   for (const layer of ["clusters", "photo"]) {
     map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
   }
   map.on("click", "clusters", async (e) => {
+    if (state.pickHome) return;
     const f = e.features[0];
     const src = map.getSource("photos");
     const leaves = await src.getClusterLeaves(f.properties.cluster_id, 2000, 0);
     openPanel(leaves.map(l => l.properties.id), f.geometry.coordinates, f.properties.cluster_id, f.properties.point_count);
   });
   map.on("click", "photo", (e) => {
+    if (state.pickHome) return;
     const f = e.features[0];
     openPanel([f.properties.id], f.geometry.coordinates, null, 1);
   });
+  map.on("click", (e) => { if (state.pickHome) state.pickHome(e.lngLat); });
+}
+
+function setMapBtn() {
+  const b = $("mapBtn");
+  b.textContent = state.styleSat ? "🗺️" : "🛰️";
+  b.title = state.styleSat ? "Karte zeigen" : "Satellitenbild zeigen";
+  b.setAttribute("aria-label", b.title);
+}
+
+async function switchMapMode() {
+  const want = state.styleSat ? "map" : "sat";
+  const st = await styleFor(want);
+  state.styleOnline = st.online; state.styleSat = st.sat;
+  store.set("fg_map", st.sat ? "sat" : "map");
+  setMapBtn();
+  state.map.setStyle(st.style, { diff: false });
+  state.map.once("style.load", addOverlays);
 }
 
 function geojson(points) {
@@ -248,14 +315,16 @@ function updateVisited() {
 
 function applyFilter(fit = false) {
   const { yearFrom, yearTo, scope } = state;
-  state.filtered = state.points.filter(p => (scope === "all" || p[4] === scope)
-    && (!yearFrom || (p[5] || 0) >= yearFrom) && (!yearTo || (p[5] || 9999) <= yearTo));
+  state.filtered = state.tripIds
+    ? state.points.filter(p => state.tripIds.has(p[0]))
+    : state.points.filter(p => (scope === "all" || p[4] === scope)
+      && (!yearFrom || (p[5] || 0) >= yearFrom) && (!yearTo || (p[5] || 9999) <= yearTo));
   const src = state.map && state.map.getSource("photos");
   if (src) src.setData(geojson(state.filtered));
   updateVisited();
   if (!$("stats").classList.contains("hidden")) loadStats();
   const n = state.filtered.length;
-  $("countChip").textContent = `${nf.format(n)} Foto${n === 1 ? "" : "s"}`;
+  $("countChip").textContent = `${state.tripIds ? "Reise: " : ""}${nf.format(n)} Foto${n === 1 ? "" : "s"}`;
   $("countChip").title = state.withoutGps ? `${nf.format(state.withoutGps)} Fotos ohne Aufnahmeort werden nicht angezeigt` : "";
   if (fit) flyHome(true);
 }
@@ -320,6 +389,7 @@ $$(".seg button").forEach(b => b.addEventListener("click", () => {
   applyFilter();
 }));
 $("homeBtn").addEventListener("click", () => flyHome());
+$("mapBtn").addEventListener("click", () => switchMapMode());
 
 // ---------- Galerie einer Pinnadel ----------
 const thumbQueue = { active: 0, waiting: [], max: 6 };
@@ -366,7 +436,7 @@ function rangeText(photos) {
   return a === b ? a : `${a} – ${b}`;
 }
 
-async function openPanel(ids, center, clusterId, total) {
+async function openPanel(ids, center, clusterId, total, title) {
   thumbQueue.waiting.length = 0;
   for (const img of $$("#grid img")) if (img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
   state.panel = { photos: [], center, clusterId };
@@ -381,7 +451,7 @@ async function openPanel(ids, center, clusterId, total) {
   try { photos = await api("photos/info", { method: "POST", body: { ids: ids.slice(0, 2000) } }); }
   catch (e) { $("panelSub").textContent = e.message; return; }
   state.panel.photos = photos;
-  $("panelTitle").textContent = placeTitle(photos, total);
+  $("panelTitle").textContent = title || placeTitle(photos, total);
   $("panelSub").textContent = [countText(photos), rangeText(photos)].filter(Boolean).join(" · ");
   if (total > photos.length) $("gridMore").textContent = `Hier werden die ersten ${nf.format(photos.length)} gezeigt – hineinzoomen für den Rest.`;
   // Überschriften: bei wenigen Tagen pro Tag, sonst pro Monat
@@ -440,6 +510,7 @@ async function showLb(i) {
   bits.push(`${p.scope === "personal" ? "Meine Fotos" : "Gemeinsame Fotos"}${p.folder ? " / " + esc(p.folder) : ""}`);
   bits.push(`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}${p.alt ? ` · ${Math.round(p.alt)} m` : ""}`);
   $("lbMeta").innerHTML = bits.join(" · ");
+  $("lbPhotos").classList.toggle("hidden", !(PROXY || (state.mapCfg && state.mapCfg.photos_url)));
   $("lbPrev").disabled = i === 0;
   $("lbNext").disabled = i === photos.length - 1;
   const img = $("lbImg"), vid = $("lbVideo");
@@ -496,6 +567,51 @@ $("lbDownload").addEventListener("click", async () => {
     setTimeout(() => URL.revokeObjectURL(u), 10000);
   } catch (e) { alert("Download fehlgeschlagen: " + e.message); } finally { btn.disabled = false; }
 });
+// In Synology Photos öffnen: im DSM-Fenster den Ordner des Fotos (Ordner-ID über die Photos-Schnittstelle, nur lesend),
+// sonst bzw. wenn das nicht klappt den richtigen Bereich (persönlich/gemeinsam).
+async function photosFolderId(space, folder) {
+  const apiName = space === "personal_space" ? "SYNO.Foto.Browse.Folder" : "SYNO.FotoTeam.Browse.Folder";
+  const call = async (params) => {
+    const q = new URLSearchParams({ api: apiName, version: "1", ...params });
+    if (SYNO_TOKEN) q.set("SynoToken", SYNO_TOKEN);
+    const res = await fetch(`/webapi/entry.cgi?${q}`, { credentials: "same-origin", headers: SYNO_TOKEN ? { "X-SYNO-TOKEN": SYNO_TOKEN } : {} });
+    const j = await res.json();
+    if (!j.success) throw new Error("Photos-API: " + JSON.stringify(j.error || {}));
+    return (j.data && j.data.list) || [];
+  };
+  const parts = folder.split("/").filter(Boolean);
+  let level = await call({ method: "list_parents" });
+  let found = null;
+  for (let k = 0; k < parts.length; k++) {
+    const want = "/" + parts.slice(0, k + 1).join("/");
+    found = level.find(f => f.name === want);
+    if (!found) return null;
+    if (k < parts.length - 1) {
+      level = [];
+      for (let off = 0; ; off += 500) {
+        const page = await call({ method: "list", id: String(found.id), offset: String(off), limit: "500" });
+        level = level.concat(page);
+        if (page.length < 500) break;
+      }
+    }
+  }
+  return found ? found.id : null;
+}
+$("lbPhotos").addEventListener("click", async () => {
+  const p = state.panel.photos[state.lb];
+  const space = p.scope === "personal" ? "personal_space" : "shared_space";
+  const tab = window.open("about:blank", "_blank");  // sofort öffnen, sonst blockt der Browser das Fenster
+  let target;
+  if (PROXY) {
+    let id = null;
+    try { id = p.folder ? await photosFolderId(space, p.folder) : null; } catch (e) { console.warn(e); }
+    target = `/photo/#/${space}${id ? "/folder/" + id : ""}`;
+  } else {
+    target = `${state.mapCfg.photos_url}/#/${space}`;
+  }
+  if (tab) tab.location.href = new URL(target, location.href).href; else location.href = target;
+});
+
 // Wischen auf dem Handy
 (() => {
   let x0 = null;
@@ -563,7 +679,7 @@ function repaintMap() {
   const map = state.map;
   if (!map) return;
   for (const id of map.listImages()) if (id.startsWith("pin|")) map.removeImage(id);
-  if (!state.styleOnline) {
+  if (!state.styleOnline && map.getLayer("ocean")) {
     const s = offlineStyle();
     map.setPaintProperty("ocean", "background-color", s.layers[0].paint["background-color"]);
     map.setPaintProperty("land", "fill-color", s.layers[1].paint["fill-color"]);
@@ -694,6 +810,19 @@ async function tabGeneral(body) {
           Der Browser lädt die Kartenkacheln direkt dort – die Fotos und ihre Orte verlassen die NAS nicht.
           Ist der Dienst nicht erreichbar, zeigt der Globus eine schlichte Kugel mit Ländergrenzen.</p>
       </fieldset>
+      <fieldset><legend>Satellitenbild</legend>
+        <label class="inline"><input type="radio" name="gSat" value="esri"${s.satellite === "esri" ? " checked" : ""}> Esri (ohne Schlüssel, nicht-kommerziell)</label>
+        <label class="inline"><input type="radio" name="gSat" value="maptiler"${s.satellite === "maptiler" ? " checked" : ""}> MapTiler (mit Schlüssel)</label>
+        <label class="inline"><input type="radio" name="gSat" value="off"${s.satellite === "off" ? " checked" : ""}> Aus</label>
+        <label>MapTiler-Schlüssel <input id="gMtKey" value="${esc(s.maptiler_key)}" placeholder="aus cloud.maptiler.com → API keys" autocomplete="off"></label>
+        <p class="muted small">Der Schlüssel ist im Browser sichtbar – bei MapTiler unter „Allowed HTTP origins“ auf die eigene Adresse beschränken.
+          Der Knopf 🛰️ oben schaltet zwischen Karte und Satellit um.</p>
+      </fieldset>
+      <fieldset><legend>Synology Photos</legend>
+        <label>Adresse von Synology Photos <input id="gPhotosUrl" value="${esc(s.photos_url)}" placeholder="https://nas.meinedomain.de:5001/photo"></label>
+        <p class="muted small">Im DSM-Fenster öffnet „In Synology Photos öffnen“ direkt den Ordner des Fotos. Außerhalb von DSM
+          (eigene Adresse, Handy) braucht es diese Adresse; dann öffnet sich der richtige Bereich, aber nicht der Ordner.</p>
+      </fieldset>
       <fieldset><legend>Anmeldung</legend>
         ${chk("gDsmLogin", s.dsm_login === "1", "Anmeldung mit DSM-Konten (Benutzername/Passwort, auch 2FA)")}
         ${chk("gAuto", s.dsm_auto_create === "1", "DSM-Benutzer beim ersten Besuch automatisch zulassen")}
@@ -714,6 +843,8 @@ async function tabGeneral(body) {
       map_style: $("gStyle").value.trim(), dsm_login: $("gDsmLogin").checked, dsm_auto_create: $("gAuto").checked,
       dsm_admins: $("gAdmins").checked, dsm_url: $("gDsmUrl").value.trim(), public_url: $("gPublic").value.trim(),
       port: Number($("gPort").value),
+      satellite: ($$("[name=gSat]").find(x => x.checked) || {}).value || "esri",
+      maptiler_key: $("gMtKey").value.trim(), photos_url: $("gPhotosUrl").value.trim(),
     }, $("gMsg"));
     if (r && r.port_configured !== s.port_configured) tabGeneral(body);
   });
@@ -860,8 +991,10 @@ function flyToBbox(b) {
   if (e - w < pad) { w -= pad; e += pad; }
   if (n - s < pad) { s -= pad; n += pad; }
   const narrow = window.innerWidth < 720;
-  state.map.fitBounds([[w, s], [e, n]], { padding: narrow ? { top: 140, bottom: window.innerHeight * 0.62, left: 30, right: 30 }
-                                                          : { top: 110, bottom: 60, left: 60, right: 460 },
+  const leftOpen = !$("trips").classList.contains("hidden") || !$("stats").classList.contains("hidden");
+  const top = narrow ? document.querySelector(".topbar").getBoundingClientRect().bottom + 40 : 110;
+  state.map.fitBounds([[w, s], [e, n]], { padding: narrow ? { top, bottom: window.innerHeight * 0.62 + 20, left: 40, right: 40 }
+                                                          : { top, bottom: 60, left: leftOpen ? 430 : 60, right: 460 },
                                           maxZoom: state.styleOnline ? 13 : 6, duration: 1800 });
 }
 
@@ -962,10 +1095,184 @@ async function loadStats() {
 }
 $("statsBtn").addEventListener("click", () => {
   const box = $("stats");
+  closePanelsExcept("stats");
+  if (tripsState.current) leaveTrip();
   box.classList.toggle("hidden");
   if (!box.classList.contains("hidden")) { if (window.innerWidth < 720) $("panel").classList.add("hidden"); loadStats(); }
 });
 $("statsClose").addEventListener("click", () => $("stats").classList.add("hidden"));
+
+
+// ---------- Reisen ----------
+const tripsState = { data: null, showHidden: false, current: null };
+function dayRange(a, b) {
+  const [ya, ma, da] = a.split("-").map(Number), [yb, mb, db] = b.split("-").map(Number);
+  if (a === b) return `${da}. ${MONTHS[ma - 1]} ${ya}`;
+  if (ya === yb && ma === mb) return `${da}.–${db}. ${MONTHS[ma - 1]} ${ya}`;
+  if (ya === yb) return `${da}. ${MONTHS[ma - 1]} – ${db}. ${MONTHS[mb - 1]} ${ya}`;
+  return `${deDate(a)} – ${deDate(b)}`;
+}
+function closePanelsExcept(id) {
+  for (const p of ["stats", "trips"]) if (p !== id) $(p).classList.add("hidden");
+}
+function setRoute(route) {
+  if (!route || route.length === 0) { state.routeData = null; }
+  else {
+    const feats = [];
+    if (route.length > 1) feats.push({ type: "Feature", geometry: { type: "LineString", coordinates: route.map(s => [s.lon, s.lat]) }, properties: {} });
+    route.forEach((s, i) => feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+                                        properties: { end: i === 0 || i === route.length - 1 } }));
+    state.routeData = { type: "FeatureCollection", features: feats };
+  }
+  const src = state.map && state.map.getSource("route");
+  if (src) src.setData(state.routeData || { type: "FeatureCollection", features: [] });
+}
+function leaveTrip() {
+  if (!tripsState.current) return;
+  tripsState.current = null;
+  state.tripIds = null;
+  setRoute(null);
+  applyFilter();
+}
+
+async function loadTrips() {
+  const body = $("tripsBody");
+  $("tripsTitle").textContent = "Reisen";
+  try { tripsState.data = await api(`trips?${filterQuery()}`); }
+  catch (e) { body.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  renderTrips();
+}
+
+function renderTrips() {
+  const d = tripsState.data, body = $("tripsBody");
+  const h = d.home;
+  $("tripsSub").textContent = `${d.trips.filter(t => !t.hidden).length} Reisen · mehr als ${d.away_km} km von Zuhause`;
+  const visible = d.trips.filter(t => !t.hidden), hidden = d.trips.filter(t => t.hidden);
+  const row = (t) => `<button class="trip${t.hidden ? " hiddenTrip" : ""}" data-trip="${t.id}">
+      <span class="cover">${t.cover ? `<img data-cover="${t.cover}" alt="">` : ""}</span>
+      <span class="txt"><b>${esc(t.title)}</b><span>${dayRange(t.start, t.end)} · ${t.days} Tag${t.days === 1 ? "" : "e"} · ${t.countries.map(c => flag(c.cc)).join(" ")}</span></span>
+      <span class="muted small">${nf.format(t.count)}</span></button>`;
+  let html = `<div class="homeLine"><span>🏠</span><span class="grow">Zuhause: <b>${esc(h ? h.label || "unbekannt" : "noch unbekannt")}</b>
+      <span class="muted small">${h ? (h.source === "auto" ? "(automatisch)" : "(selbst gesetzt)") : ""}</span></span>
+      <button class="mini" id="homePick">Ändern</button>${h && h.source === "manual" ? '<button class="mini" id="homeAuto">Automatisch</button>' : ""}</div>`;
+  if (!visible.length) html += `<p class="muted">Noch keine Reisen erkannt. Eine Reise sind mindestens 3 Fotos mehr als ${d.away_km} km von Zuhause,
+      mit höchstens 2 Tagen ohne Fotos dazwischen.</p>`;
+  let year = null;
+  for (const t of visible) {
+    const y = t.start.slice(0, 4);
+    if (y !== year) { html += `<h3>${y}</h3>`; year = y; }
+    html += row(t);
+  }
+  if (hidden.length) {
+    html += `<h3><button class="backLink" id="toggleHidden">${tripsState.showHidden ? "▾" : "▸"} Ausgeblendet (${hidden.length})</button></h3>`;
+    if (tripsState.showHidden) html += hidden.map(row).join("");
+  }
+  html += `<p style="margin-top:18px"><button class="mini danger" id="tripsReset">Alle Änderungen an Reisen zurücksetzen</button></p>`;
+  body.innerHTML = html;
+  $$("#tripsBody [data-trip]").forEach(b => b.addEventListener("click", () => openTrip(Number(b.dataset.trip))));
+  $$("#tripsBody img[data-cover]").forEach(img => queueThumb(img, img.dataset.cover));
+  $("homePick").addEventListener("click", pickHome);
+  if ($("homeAuto")) $("homeAuto").addEventListener("click", async () => { tripsState.data = await api("home", { method: "PUT", body: { auto: true } }); renderTrips(); });
+  if ($("toggleHidden")) $("toggleHidden").addEventListener("click", () => { tripsState.showHidden = !tripsState.showHidden; renderTrips(); });
+  $("tripsReset").addEventListener("click", async () => {
+    if (!confirm("Alle umbenannten, geteilten, zusammengeführten und ausgeblendeten Reisen zurücksetzen? Danach werden die Reisen neu erkannt.")) return;
+    tripsState.data = await api("trips/reset", { method: "POST" }); renderTrips();
+  });
+}
+
+function pickHome() {
+  notice("Klicke auf dem Globus auf dein Zuhause. <button class='mini' id='pickCancel'>Abbrechen</button>");
+  $("map").classList.add("pickNotice");
+  if (window.innerWidth < 720) $("trips").classList.add("hidden");
+  const done = () => { state.pickHome = null; $("map").classList.remove("pickNotice"); notice(""); };
+  $("pickCancel").addEventListener("click", () => { done(); $("trips").classList.remove("hidden"); });
+  state.pickHome = async (ll) => {
+    done();
+    try { tripsState.data = await api("home", { method: "PUT", body: { lat: ll.lat, lon: ((ll.lng + 540) % 360) - 180 } }); }
+    catch (e) { notice(esc(e.message)); return; }
+    $("trips").classList.remove("hidden");
+    renderTrips();
+  };
+}
+
+async function openTrip(id) {
+  let t;
+  try { t = await api(`trips/${id}`); } catch (e) { notice(esc(e.message)); return; }
+  tripsState.current = t;
+  state.tripIds = new Set(t.ids);
+  applyFilter();
+  setRoute(t.route);
+  flyToBbox(t.bbox);
+  renderTripDetail();
+  if (window.innerWidth >= 720) openPanel(t.ids, null, null, t.count, t.title);
+}
+
+function renderTripDetail() {
+  const t = tripsState.current, body = $("tripsBody");
+  $("tripsTitle").textContent = t.title;
+  $("tripsSub").textContent = `${dayRange(t.start, t.end)} · ${t.days} Tag${t.days === 1 ? "" : "e"}`;
+  const start = new Date(t.start + "T00:00:00");
+  const dayNo = (iso) => Math.round((new Date(iso.slice(0, 10) + "T00:00:00") - start) / 86400000) + 1;
+  const splitDays = t.photo_days.filter(d => d > t.start);
+  body.innerHTML = `
+    <button class="backLink" id="tripBack">← Alle Reisen</button>
+    <div class="kpis" style="margin-top:8px">
+      <div><b>${nf.format(t.count - t.videos)}</b>Fotos</div><div><b>${nf.format(t.videos)}</b>Videos</div>
+      <div><b>${t.route.length}</b>Halt${t.route.length === 1 ? "" : "e"}</div>
+      <div><b>${t.countries.map(c => flag(c.cc)).join(" ")}</b>${t.countries.map(c => esc(c.name)).join(", ")}</div>
+    </div>
+    <button class="primary" id="tripPhotos" style="margin-top:10px;width:100%">🖼 Fotos ansehen</button>
+    <h3>Route</h3>
+    <ol class="stops">${t.route.map((s, i) => `<li><button data-stop="${i}"><span class="day">Tag ${dayNo(s.first)}</span>
+      <span>${esc(s.label || "Unterwegs")}</span><span class="n">${s.count}</span></button></li>`).join("")}</ol>
+    <h3>Bearbeiten</h3>
+    <div class="actions">
+      <button id="tripRename">✏️ Umbenennen${t.renamed ? ` <span class="muted small">(automatisch: ${esc(t.auto_title)})</span>` : ""}</button>
+      ${splitDays.length ? `<div class="row"><select id="tripSplitDay">${splitDays.map(d => `<option value="${d}">ab ${deDate(d)} (Tag ${dayNo(d)})</option>`).join("")}</select>
+        <button id="tripSplit">✂️ Teilen</button></div>` : ""}
+      <div class="row">
+        <button id="tripMergePrev"${t.prev ? "" : " disabled"}>🔗 Mit vorheriger</button>
+        <button id="tripMergeNext"${t.next ? "" : " disabled"}>🔗 Mit nächster</button>
+      </div>
+      <button id="tripHide">${t.hidden ? "👁 Wieder einblenden" : "🙈 Ausblenden"}</button>
+    </div>
+    <div class="err" id="tripErr"></div>`;
+  const err = (e) => { $("tripErr").textContent = e.message; };
+  $("tripBack").addEventListener("click", () => { leaveTrip(); $("panel").classList.add("hidden"); loadTrips(); });
+  $("tripPhotos").addEventListener("click", () => {
+    if (window.innerWidth < 720) $("trips").classList.add("hidden");
+    openPanel(t.ids, null, null, t.count, t.title);
+  });
+  $$("#tripsBody [data-stop]").forEach(b => b.addEventListener("click", () => {
+    const s = t.route[Number(b.dataset.stop)];
+    state.map.flyTo({ center: [s.lon, s.lat], zoom: state.styleOnline ? 12 : 6, duration: 1400 });
+  }));
+  $("tripRename").addEventListener("click", async () => {
+    const name = prompt("Name der Reise (leer = automatischer Name):", t.renamed ? t.title : "");
+    if (name === null) return;
+    try { tripsState.current = await api(`trips/${t.id}`, { method: "PATCH", body: { title: name } }); renderTripDetail(); } catch (e) { err(e); }
+  });
+  if ($("tripSplit")) $("tripSplit").addEventListener("click", async () => {
+    try { await api(`trips/${t.id}/split`, { method: "POST", body: { day: $("tripSplitDay").value } }); openTrip(t.id); } catch (e) { err(e); }
+  });
+  const merge = async (other) => {
+    try { const m = await api(`trips/${t.id}/merge`, { method: "POST", body: { other } }); openTrip(m.id); } catch (e) { err(e); }
+  };
+  $("tripMergePrev").addEventListener("click", () => t.prev && merge(t.prev));
+  $("tripMergeNext").addEventListener("click", () => t.next && merge(t.next));
+  $("tripHide").addEventListener("click", async () => {
+    try { tripsState.current = await api(`trips/${t.id}`, { method: "PATCH", body: { hidden: !t.hidden } }); renderTripDetail(); } catch (e) { err(e); }
+  });
+}
+
+$("tripsBtn").addEventListener("click", () => {
+  const box = $("trips");
+  const open = box.classList.contains("hidden");
+  closePanelsExcept("trips");
+  box.classList.toggle("hidden", !open);
+  if (open) { if (window.innerWidth < 720) $("panel").classList.add("hidden"); if (!tripsState.current) loadTrips(); }
+});
+$("tripsClose").addEventListener("click", () => { $("trips").classList.add("hidden"); leaveTrip(); });
 
 // ---------- los ----------
 loadBranding();

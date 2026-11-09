@@ -314,5 +314,14 @@ def photos_where(cc: str = Query(..., pattern="^[A-Z]{2}$"), place: Optional[str
 
 @router.get("/map-config")
 def map_config(conn: sqlite3.Connection = Depends(get_db), user=Depends(current_user)):
-    """Kartenstil für den Browser (leer = nur die Offline-Kugel mit Ländergrenzen)."""
-    return {"style": get_setting(conn, "map_style") or ""}
+    """Kartenstil für den Browser (leer = nur die Offline-Kugel mit Ländergrenzen), Satellit, Synology Photos."""
+    sat = get_setting(conn, "satellite")
+    key = get_setting(conn, "maptiler_key")
+    satellite = None
+    if sat == "esri":
+        satellite = {"type": "esri"}
+    elif sat == "maptiler" and key:
+        # Der Schlüssel landet zwangsläufig im Browser – bei MapTiler auf die eigene Adresse beschränken
+        satellite = {"type": "maptiler", "style": f"https://api.maptiler.com/maps/hybrid/style.json?key={key}"}
+    return {"style": get_setting(conn, "map_style") or "", "satellite": satellite,
+            "photos_url": get_setting(conn, "photos_url") or ""}

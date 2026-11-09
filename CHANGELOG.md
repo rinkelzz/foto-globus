@@ -2,6 +2,25 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.3.0] – 2026-11-09
+
+### Neu
+- **Reisen** (🧳): werden automatisch erkannt – Fotos mehr als 100 km von Zuhause, mit höchstens 2 Tagen ohne Fotos
+  dazwischen, mindestens 3 Fotos. Namen wie „Italien, Mai 2023“ oder „Hamburg, März 2025“.
+- **Zuhause** wird automatisch bestimmt (Ort mit den meisten Fototagen) und lässt sich per Klick auf den Globus
+  selbst setzen.
+- **Route:** Eine Reise zeigt ihren Weg als Linie von Halt zu Halt (Tag 1 Rom → Tag 4 Florenz → Tag 6 Venedig),
+  dazu nur ihre Fotos auf dem Globus und in der Galerie.
+- Reisen **umbenennen, teilen, zusammenführen, ausblenden** – Änderungen bleiben bei jeder neuen Suche erhalten;
+  „Alle Änderungen zurücksetzen“ erkennt neu.
+- **Satellitenbild** (🛰️): Esri ohne Schlüssel oder MapTiler mit eigenem Schlüssel, einstellbar unter
+  Karte & Anmeldung. Die Wahl merkt sich der Browser.
+- **In Synology Photos öffnen** in der Großansicht: im DSM-Fenster direkt im Ordner des Fotos, sonst im richtigen
+  Bereich (Adresse von Synology Photos in den Einstellungen).
+
+### Behoben
+- Direkt nach „Jetzt nach Fotos suchen“ zeigte die Suche manchmal kurz „läuft nicht“ an.
+
 ## [0.2.0] – 2026-11-08
 
 ### Neu
@@ -41,5 +60,6 @@ Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versi
 - DSM-Fenster mit Single Sign-on, Anmeldung mit DSM-Konto (inkl. 2FA), vier Designs, Firmenname und Logo,
   nächtliche Sicherung mit Wiederherstellen, Änderungsprotokoll, Updates übers Paket-Zentrum, Port änderbar.
 
+[0.3.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.1.0

@@ -180,7 +180,8 @@ def test_local_admin_sees_no_photos_but_can_scan(library, acl):
         c.post("/api/v1/auth/login", json={"username": "admin", "password": os.environ["FG_ADMIN_PASSWORD"]})
         assert c.get("/api/v1/points").status_code == 403
         assert c.post("/api/v1/scan").status_code == 200
-        for _ in range(100):
+        # Suche läuft im Hintergrund (inkl. Laden der Ortsliste) – großzügig warten, damit sie nicht in andere Tests läuft
+        for _ in range(600):
             st = c.get("/api/v1/scan").json()
             if not st["running"]:
                 break
@@ -357,3 +358,22 @@ def test_expired_video_token():
     assert check_video_token("kaputt", 7) is None
     dotted = make_video_token("vor.name", 7, now=1000)
     assert check_video_token(dotted, 7, now=1001) == "vor.name"
+
+
+def test_satellite_and_photos_url_settings():
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+        c.post("/api/v1/auth/login", json={"username": "admin", "password": os.environ["FG_ADMIN_PASSWORD"]})
+        assert c.get("/api/v1/map-config").json()["satellite"] == {"type": "esri"}
+        # MapTiler ohne Schlüssel → kein Satellit; mit Schlüssel → Stil-Adresse mit Schlüssel
+        c.patch("/api/v1/settings", json={"satellite": "maptiler"})
+        assert c.get("/api/v1/map-config").json()["satellite"] is None
+        assert c.patch("/api/v1/settings", json={"maptiler_key": "x\"><script>"}).status_code == 400
+        c.patch("/api/v1/settings", json={"maptiler_key": "AbCdEf123456"})
+        assert c.get("/api/v1/map-config").json()["satellite"]["style"].endswith("key=AbCdEf123456")
+        c.patch("/api/v1/settings", json={"satellite": "off"})
+        assert c.get("/api/v1/map-config").json()["satellite"] is None
+        assert c.patch("/api/v1/settings", json={"satellite": "google"}).status_code == 422
+        assert c.patch("/api/v1/settings", json={"photos_url": "javascript:alert(1)"}).status_code == 400
+        c.patch("/api/v1/settings", json={"photos_url": "https://nas.example.de:5001/photo/"})
+        assert c.get("/api/v1/map-config").json()["photos_url"] == "https://nas.example.de:5001/photo"
+        c.patch("/api/v1/settings", json={"satellite": "esri", "maptiler_key": "", "photos_url": ""})

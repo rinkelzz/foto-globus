@@ -18,7 +18,8 @@ from ..timeutil import local_iso
 router = APIRouter(prefix="/api/v1", tags=["Verwaltung (Admin)"])
 
 EDITABLE = ("public_url", "dsm_login", "dsm_auto_create", "dsm_admins", "dsm_url", "shared_root", "homes_root",
-            "scan_shared", "scan_personal", "scan_enabled", "scan_hour", "share_access", "map_style", "theme_default")
+            "scan_shared", "scan_personal", "scan_enabled", "scan_hour", "share_access", "map_style", "theme_default",
+            "satellite", "maptiler_key", "photos_url")
 
 
 CONFIG_ENV = "config.env"  # liegt im Datenordner des Pakets (/var/packages/fotoglobus/var), liest das Start-Skript
@@ -79,6 +80,9 @@ class SettingsIn(BaseModel):
     map_style: Optional[str] = Field(None, max_length=300)
     theme_default: Optional[str] = None
     port: Optional[int] = Field(None, ge=1024, le=65535, description="gilt nach Neustart des Pakets")
+    satellite: Optional[str] = Field(None, pattern="^(esri|maptiler|off)$")
+    maptiler_key: Optional[str] = Field(None, max_length=64)
+    photos_url: Optional[str] = Field(None, max_length=300)
 
 
 def _check_dir(value: str, label: str) -> str:
@@ -122,6 +126,14 @@ def update_settings(data: SettingsIn, admin=Depends(admin_user), conn: sqlite3.C
             value = value.strip()
             if value and not value.startswith("https://"):
                 raise HTTPException(400, "Kartenstil bitte als https-Adresse angeben (leer = Offline-Kugel)")
+        elif key == "maptiler_key":
+            value = value.strip()
+            if value and not re.match(r"^[A-Za-z0-9_-]{8,64}$", value):
+                raise HTTPException(400, "Der MapTiler-Schlüssel sieht nicht richtig aus (nur Buchstaben und Ziffern)")
+        elif key == "photos_url":
+            value = value.strip().rstrip("/")
+            if value and not re.match(r"^https?://[^\s/]+(/[^\s]*)?$", value):
+                raise HTTPException(400, "Adresse von Synology Photos bitte mit http:// oder https:// angeben")
         elif key == "theme_default" and value not in THEMES:
             raise HTTPException(400, "Unbekanntes Design")
         set_setting(conn, key, str(value))

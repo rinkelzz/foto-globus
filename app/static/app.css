@@ -201,3 +201,25 @@ pre.raw { white-space: pre-wrap; font-size: 12px; background: var(--bg); padding
   .searchBox { order: 2; flex: 1 1 100%; max-width: none; }
   .panel.left { top: auto; left: 0; right: 0; bottom: 0; width: 100%; height: 62vh; border-radius: 16px 16px 0 0; }
 }
+
+/* Reisen */
+.homeLine { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; background: var(--bg); border-radius: 10px; font-size: 14px; }
+.homeLine .grow { flex: 1; min-width: 0; }
+.trip { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: none; background: none; padding: 7px 4px; border-radius: 8px; }
+.trip:hover { background: var(--bg); }
+.trip .cover { width: 52px; height: 52px; border-radius: 8px; overflow: hidden; background: var(--bg); flex: 0 0 auto; position: relative; }
+.trip .cover img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
+.trip .cover img.loaded { opacity: 1; }
+.trip .txt { flex: 1; min-width: 0; }
+.trip .txt b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trip .txt span { font-size: 13px; color: var(--muted); }
+.trip.hiddenTrip { opacity: .55; }
+.stops { margin: 6px 0 0; padding: 0; list-style: none; }
+.stops li button { display: flex; gap: 8px; width: 100%; text-align: left; border: none; background: none; padding: 5px 4px; border-radius: 6px; font-size: 14px; }
+.stops li button:hover { background: var(--bg); }
+.stops .day { color: var(--muted); width: 3.6em; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.stops .n { margin-left: auto; color: var(--muted); font-size: 13px; }
+.actions { display: grid; gap: 6px; margin-top: 14px; }
+.actions .row select { flex: 1; }
+.backLink { border: none; background: none; color: var(--accent); padding: 2px 0; font-weight: 600; }
+.pickNotice { cursor: crosshair; }

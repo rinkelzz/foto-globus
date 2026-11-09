@@ -7,7 +7,7 @@
 Deine Fotos und Videos aus **Synology Photos** als Pinnadeln auf einer drehbaren **Weltkugel** – direkt auf der
 eigenen NAS, als Paket mit eigenem Fenster in DSM. Jede Nadel zeigt, wie viele Fotos an diesem Ort entstanden sind.
 Ein Klick öffnet die Galerie, von dort geht es in die Großansicht, zum Video oder zum Original. Mit Ortsnamen,
-Suche, Statistik und eingefärbten Reiseländern. Persönliche Fotos sieht nur der
+Suche, Statistik, eingefärbten Reiseländern, automatisch erkannten **Reisen mit Route** und Satellitenbild. Persönliche Fotos sieht nur der
 Besitzer, gemeinsame Fotos richten sich nach den **Ordnerrechten in DSM**.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lapalutschi)
@@ -23,6 +23,10 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 | Suche nach Ort oder Land | Statistik „Meine Welt“ |
 |---|---|
 | ![Suche](docs/screenshots/suche-ort.jpg) | ![Statistik](docs/screenshots/statistik.jpg) |
+
+| Reisen | Reise mit Route |
+|---|---|
+| ![Reisen](docs/screenshots/reisen.jpg) | ![Route](docs/screenshots/reise-route.jpg) |
 
 | Videos abspielen | Am Handy |
 |---|---|
@@ -55,6 +59,11 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 - **Suche** nach Ort oder Land: der Globus fliegt hin und öffnet die Fotos.
 - **Statistik „Meine Welt“**: Länder, Orte, Fotos pro Jahr (Klick filtert), Top-Orte, Länderliste – und die
   **besuchten Länder** werden auf dem Globus eingefärbt.
+- **Reisen** werden automatisch erkannt (mehr als 100 km von Zuhause, höchstens 2 Tage ohne Fotos dazwischen) und
+  mit **Route** von Halt zu Halt gezeigt. Umbenennen, teilen, zusammenführen, ausblenden – die Änderungen bleiben.
+  Zuhause bestimmt die App selbst, man kann es aber per Klick auf den Globus setzen.
+- **Satellitenbild** per Knopf 🛰️: Esri ohne Schlüssel oder MapTiler mit eigenem Schlüssel.
+- **In Synology Photos öffnen:** im DSM-Fenster direkt im Ordner des Fotos.
 - **Videos** (MP4, MOV, M4V, 3GP) von iPhone, Android und Kameras: mit Ort, Zeit und Länge, **abspielbar** in der
   Großansicht (mit Spulen). Ist eine kleinere Fassung von Synology Photos da, wird die genommen.
 - **Großansicht** mit Blättern (Pfeiltasten, Wischen am Handy), Ort, Aufnahmezeit, Kamera, Ordner, Koordinaten,
@@ -109,11 +118,19 @@ eintragen. Läuft DSM selbst über https, öffnet das DSM-Fenster dann diese Adr
 
 ## Karte und Datenschutz
 
-Ortsnamen ermittelt der Foto-Globus **offline** auf der NAS (Ortsliste im Paket). Die Kartenbilder kommen
+Ortsnamen und Reisen ermittelt der Foto-Globus **offline** auf der NAS (Ortsliste im Paket). Die Kartenbilder kommen
 standardmäßig von [OpenFreeMap](https://openfreemap.org) (frei, ohne Schlüssel). Der Browser
 lädt sie direkt dort; der Anbieter sieht dabei nur, welche Gegend gerade angezeigt wird. **Fotos und ihre
 Koordinaten verlassen die NAS nicht.** Ist der Kartendienst nicht erreichbar (oder das Feld „Kartenstil“ leer),
 zeigt der Globus eine schlichte Kugel mit Ländergrenzen, die im Paket liegt.
+
+Das **Satellitenbild** kommt von Esri (World Imagery, ohne Schlüssel, gedacht für nicht-kommerzielle Nutzung) oder
+von MapTiler (eigener kostenloser Schlüssel, z. B. für Kunden). Der MapTiler-Schlüssel ist im Browser sichtbar –
+bei MapTiler unter „Allowed HTTP origins“ auf die eigene Adresse beschränken.
+
+**In Synology Photos öffnen** fragt im DSM-Fenster die Ordnerliste von Synology Photos ab (nur lesend, mit deiner
+DSM-Anmeldung), um die Ordner-ID zu finden. Das ist keine offizielle Schnittstelle; klappt es nach einem
+Synology-Update nicht mehr, öffnet sich Synology Photos im richtigen Bereich statt im Ordner.
 
 ## Updates, Sicherung, Port
 
@@ -146,13 +163,12 @@ FG_DATA_DIR=/tmp/fg/data FG_VOLUME_ROOT=/tmp/fg FG_SCHEDULER=0 python -m app.mai
 
 Aufbau: FastAPI + SQLite, statisches HTML/CSS/JS ohne Build-Schritt. Die wichtigsten Teile:
 `app/exif.py` (Exif aus JPEG/HEIC/PNG/TIFF, Ort/Zeit aus MP4/MOV), `app/geo.py` (Ortsnamen offline),
-`app/scanner.py` (Fotoordner durchsuchen), `app/access.py`
+`app/scanner.py` (Fotoordner durchsuchen), `app/trips.py` (Reisen erkennen), `app/access.py`
 (Rechte nach DSM), `app/routers/photos.py` (Punkte, Galerie, Vorschauen), `app/static/app.js` (Globus).
 Die Länderkugel `app/static/vendor/world.geojson` entsteht mit `tools/make_world.py` aus world-atlas.
 
 ## Pläne
 
-- **0.3:** Reisen automatisch erkennen und als Route zeigen, Absprung zu Synology Photos, Satellitenbild
 - **0.4:** „Reise nachspielen“ (Kamerafahrt), Heatmap
 
 ## Hinweise

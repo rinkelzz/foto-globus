@@ -50,13 +50,24 @@
       </div>
     </div>
     <div class="tools">
+      <button id="tripsBtn" title="Reisen" aria-label="Reisen">🧳</button>
       <button id="statsBtn" title="Statistik" aria-label="Statistik">📊</button>
+      <button id="mapBtn" class="hidden" title="Satellitenbild zeigen" aria-label="Satellitenbild zeigen">🛰️</button>
       <button id="homeBtn" title="Ganze Welt zeigen" aria-label="Ganze Welt zeigen">⟲</button>
       <button id="menuBtn" title="Menü" aria-label="Menü">☰</button>
     </div>
   </header>
 
   <div id="notice" class="notice hidden"></div>
+
+  <!-- Reisen -->
+  <aside id="trips" class="panel left hidden" aria-label="Reisen">
+    <div class="panelHead">
+      <div><b id="tripsTitle">Reisen</b><div class="muted small" id="tripsSub"></div></div>
+      <button id="tripsClose" class="icon" aria-label="Schließen">✕</button>
+    </div>
+    <div id="tripsBody" class="panelBody"></div>
+  </aside>
 
   <!-- Statistik -->
   <aside id="stats" class="panel left hidden" aria-label="Statistik">
@@ -107,6 +118,7 @@
       <div class="row">
         <button class="mini" id="lbMap">📍 Auf dem Globus zeigen</button>
         <button class="mini" id="lbDownload">⬇ Original herunterladen</button>
+        <button class="mini hidden" id="lbPhotos">🖼 In Synology Photos öffnen</button>
       </div>
     </figcaption>
   </figure>

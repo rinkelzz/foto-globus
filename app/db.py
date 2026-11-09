@@ -6,7 +6,7 @@ from typing import Iterator
 from .config import settings
 from .timeutil import now_utc_str
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -107,6 +107,11 @@ DEFAULT_SETTINGS = {
     "share_access": "acl",
     # Karte
     "map_style": "https://tiles.openfreemap.org/styles/liberty",
+    # Satellitenbild: esri (ohne Schlüssel), maptiler (mit Schlüssel) oder off
+    "satellite": "esri",
+    "maptiler_key": "",
+    # Adresse von Synology Photos für den Absprung außerhalb des DSM-Fensters (leer = nur im DSM-Fenster)
+    "photos_url": "",
     # Datensicherung
     "backup_enabled": "1",
     "backup_hour": "2",
@@ -141,6 +146,27 @@ def migrate(conn: sqlite3.Connection) -> None:
             if name not in cols:
                 conn.execute(f"ALTER TABLE photos ADD COLUMN {name} {ddl}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_photos_cc ON photos(cc, place)")
+    if version < 3:
+        # 0.3.0: Reisen und Zuhause pro DSM-Benutzer
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS homes (
+                owner       TEXT PRIMARY KEY COLLATE NOCASE,   -- DSM-Benutzer
+                lat         REAL NOT NULL,
+                lon         REAL NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS trips (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner       TEXT NOT NULL COLLATE NOCASE,      -- DSM-Benutzer
+                start_day   TEXT NOT NULL,                     -- JJJJ-MM-TT, einschließlich
+                end_day     TEXT NOT NULL,
+                title       TEXT,                              -- leer = automatischer Name
+                auto        INTEGER NOT NULL DEFAULT 1,        -- 0 = vom Benutzer bearbeitet, bleibt bei Neuberechnung
+                hidden      INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner, start_day);
+        """)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 

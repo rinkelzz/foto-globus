@@ -12,7 +12,7 @@ from .config import settings
 from .db import connect, init_db
 from .dsm import write_ui_config
 from .dsm_auth import proxy_info, publish_proxy_files
-from .routers import admin, auth, backup, branding, photos, updates
+from .routers import admin, auth, backup, branding, photos, trips, updates
 
 
 @asynccontextmanager
@@ -63,7 +63,7 @@ class _RememberPeer:
 
 app.add_middleware(_RememberPeer)  # zuletzt hinzugefügt = läuft zuerst
 
-for r in (auth.router, admin.router, backup.router, branding.router, photos.router, updates.router):
+for r in (auth.router, admin.router, backup.router, branding.router, photos.router, trips.router, updates.router):
     app.include_router(r)
 
 

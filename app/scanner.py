@@ -205,9 +205,9 @@ def _forget_vanished_roots(conn: sqlite3.Connection, current: List[Root]) -> int
     return removed
 
 
-def run(trigger: str = "manuell", actor_id: Optional[int] = None) -> Optional[Dict]:
+def run(trigger: str = "manuell", actor_id: Optional[int] = None, _locked: bool = False) -> Optional[Dict]:
     """Kompletter Scan. Liefert die Zusammenfassung – oder None, wenn schon einer läuft."""
-    if not _lock.acquire(blocking=False):
+    if not _locked and not _lock.acquire(blocking=False):
         return None
     _cancel.clear()
     conn = connect()
@@ -303,9 +303,11 @@ def geocode_due() -> None:
 
 
 def start_background(trigger: str = "manuell", actor_id: Optional[int] = None) -> bool:
-    if _lock.locked():
+    # Sperre und Status schon hier setzen: Fragt die Oberfläche direkt danach nach, soll sie „läuft“ sehen
+    if not _lock.acquire(blocking=False):
         return False
-    threading.Thread(target=run, args=(trigger, actor_id), name="scan", daemon=True).start()
+    _state.update(running=True, done=0, started=time.time(), root=None)
+    threading.Thread(target=run, args=(trigger, actor_id, True), name="scan", daemon=True).start()
     return True
 
 
