@@ -2,6 +2,16 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.4.0] – 2026-11-09
+
+### Neu
+- **Reise nachspielen** (▶ in der Reise): Titelkarte, dann fliegt die Kamera von Halt zu Halt, die Route zeichnet sich
+  mit, an jedem Halt laufen bis zu 6 seiner Fotos als Diashow. Steuerung wie ein Player: Pause/Weiter (Leertaste),
+  Zurück/Weiter (Pfeiltasten), Tempo Langsam/Normal/Schnell, Vollbild (F), Beenden (Esc). Wer die Karte anfasst,
+  pausiert die Fahrt.
+- **Jahresrückblick:** alle Reisen eines Jahres nacheinander (▶ Jahresrückblick in der Reiseliste).
+- **Heatmap** (🔥): Umschalter zwischen Pinnadeln und Heatmap; Zeitraum- und Bereichsfilter gelten weiter.
+
 ## [0.3.0] – 2026-11-09
 
 ### Neu
@@ -60,6 +70,7 @@ Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versi
 - DSM-Fenster mit Single Sign-on, Anmeldung mit DSM-Konto (inkl. 2FA), vier Designs, Firmenname und Logo,
   nächtliche Sicherung mit Wiederherstellen, Änderungsprotokoll, Updates übers Paket-Zentrum, Port änderbar.
 
+[0.4.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.1.0

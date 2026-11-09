@@ -73,7 +73,8 @@ def test_detect_trips_and_home(library):
         # Detail mit Route: Palma → Cala Ratjada → Palma
         d = c.get(f"/api/v1/trips/{mallorca['id']}", headers=sso()).json()
         assert [s["label"] for s in d["route"]] == ["Palma, Spanien", "Cala Rajada, Spanien", "Palma, Spanien"]
-        assert d["route"][0]["count"] == 3 and len(d["ids"]) == 6 and d["prev"] is None and d["next"] == r["trips"][0]["id"]
+        assert d["route"][0]["count"] == 3 and len(d["route"][0]["ids"]) == 3 and len(d["ids"]) == 6
+        assert sum((s["ids"] for s in d["route"]), []) == d["ids"]   # Halte in Reihenfolge, jedes Foto genau einmal and d["prev"] is None and d["next"] == r["trips"][0]["id"]
         # andere sehen tom's Reisen nicht
         assert c.get(f"/api/v1/trips/{mallorca['id']}", headers=sso("eve")).status_code == 404
         assert c.get("/api/v1/trips", headers=sso("eve")).json()["trips"] == []

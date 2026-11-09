@@ -7,7 +7,8 @@
 Deine Fotos und Videos aus **Synology Photos** als Pinnadeln auf einer drehbaren **Weltkugel** – direkt auf der
 eigenen NAS, als Paket mit eigenem Fenster in DSM. Jede Nadel zeigt, wie viele Fotos an diesem Ort entstanden sind.
 Ein Klick öffnet die Galerie, von dort geht es in die Großansicht, zum Video oder zum Original. Mit Ortsnamen,
-Suche, Statistik, eingefärbten Reiseländern, automatisch erkannten **Reisen mit Route** und Satellitenbild. Persönliche Fotos sieht nur der
+Suche, Statistik, eingefärbten Reiseländern, automatisch erkannten **Reisen mit Route**, die sich als Kamerafahrt **nachspielen** lassen, Heatmap und
+Satellitenbild. Persönliche Fotos sieht nur der
 Besitzer, gemeinsame Fotos richten sich nach den **Ordnerrechten in DSM**.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lapalutschi)
@@ -27,6 +28,10 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 | Reisen | Reise mit Route |
 |---|---|
 | ![Reisen](docs/screenshots/reisen.jpg) | ![Route](docs/screenshots/reise-route.jpg) |
+
+| Reise nachspielen | Heatmap |
+|---|---|
+| ![Nachspielen](docs/screenshots/nachspielen.jpg) | ![Heatmap](docs/screenshots/heatmap.jpg) |
 
 | Videos abspielen | Am Handy |
 |---|---|
@@ -62,6 +67,9 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 - **Reisen** werden automatisch erkannt (mehr als 100 km von Zuhause, höchstens 2 Tage ohne Fotos dazwischen) und
   mit **Route** von Halt zu Halt gezeigt. Umbenennen, teilen, zusammenführen, ausblenden – die Änderungen bleiben.
   Zuhause bestimmt die App selbst, man kann es aber per Klick auf den Globus setzen.
+- **Reise nachspielen:** Die Kamera fliegt von Halt zu Halt, die Route zeichnet sich mit, an jedem Halt läuft eine
+  kurze Diashow. Pause, Zurück/Weiter, Tempo, Vollbild – und als **Jahresrückblick** alle Reisen eines Jahres.
+- **Heatmap** per Knopf 🔥 statt Pinnadeln: zeigt, wo die meisten Fotos entstanden sind.
 - **Satellitenbild** per Knopf 🛰️: Esri ohne Schlüssel oder MapTiler mit eigenem Schlüssel.
 - **In Synology Photos öffnen:** im DSM-Fenster direkt im Ordner des Fotos.
 - **Videos** (MP4, MOV, M4V, 3GP) von iPhone, Android und Kameras: mit Ort, Zeit und Länge, **abspielbar** in der
@@ -164,12 +172,12 @@ FG_DATA_DIR=/tmp/fg/data FG_VOLUME_ROOT=/tmp/fg FG_SCHEDULER=0 python -m app.mai
 Aufbau: FastAPI + SQLite, statisches HTML/CSS/JS ohne Build-Schritt. Die wichtigsten Teile:
 `app/exif.py` (Exif aus JPEG/HEIC/PNG/TIFF, Ort/Zeit aus MP4/MOV), `app/geo.py` (Ortsnamen offline),
 `app/scanner.py` (Fotoordner durchsuchen), `app/trips.py` (Reisen erkennen), `app/access.py`
-(Rechte nach DSM), `app/routers/photos.py` (Punkte, Galerie, Vorschauen), `app/static/app.js` (Globus).
+(Rechte nach DSM), `app/routers/photos.py` (Punkte, Galerie, Vorschauen), `app/static/app.js` (Globus), `app/static/player.js` (Reise nachspielen).
 Die Länderkugel `app/static/vendor/world.geojson` entsteht mit `tools/make_world.py` aus world-atlas.
 
 ## Pläne
 
-- **0.4:** „Reise nachspielen“ (Kamerafahrt), Heatmap
+Die geplanten Stufen sind umgesetzt. Ideen und Wünsche gern als [Issue](https://github.com/rinkelzz/foto-globus/issues).
 
 ## Hinweise
 

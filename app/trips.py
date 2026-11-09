@@ -169,6 +169,7 @@ def route(rows) -> List[Dict]:
             s["_lon"] += r["lon"]
             s["lat"], s["lon"] = s["_lat"] / s["n"], s["_lon"] / s["n"]
             s["last"] = r["taken_at"]
+            s["ids"].append(r["id"])
             if r["place"]:
                 s["_places"][(r["place"], r["cc"])] += 1
             continue
@@ -176,12 +177,13 @@ def route(rows) -> List[Dict]:
         if r["place"]:
             places[(r["place"], r["cc"])] += 1
         stops.append({"lat": r["lat"], "lon": r["lon"], "_lat": r["lat"], "_lon": r["lon"], "n": 1,
-                      "first": r["taken_at"], "last": r["taken_at"], "_places": places, "cc": r["cc"]})
+                      "first": r["taken_at"], "last": r["taken_at"], "_places": places, "cc": r["cc"], "ids": [r["id"]]})
     out = []
     for s in stops:
         top = s["_places"].most_common(1)
         out.append({"lat": round(s["lat"], 5), "lon": round(s["lon"], 5), "count": s["n"], "first": s["first"],
-                    "last": s["last"], "label": geo.label(*top[0][0]) if top else geo.country_name(s["cc"])})
+                    "last": s["last"], "label": geo.label(*top[0][0]) if top else geo.country_name(s["cc"]),
+                    "ids": s["ids"]})
     return out
 
 

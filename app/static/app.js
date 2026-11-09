@@ -235,8 +235,35 @@ function addOverlays() {
     id: "photo", type: "symbol", source: "photos", filter: ["!", ["has", "point_count"]],
     layout: { "icon-image": ["concat", "pin|1|", ["get", "s"]], "icon-anchor": "bottom", "icon-allow-overlap": true },
   });
+  // Heatmap: eigene, nicht zusammengefasste Quelle; Umschalter blendet Pins bzw. Heatmap aus
+  const firstPinLayer = "clusters";
+  map.addSource("heat", { type: "geojson", data: geojson(state.filtered || []) });
+  map.addLayer({
+    id: "heat", type: "heatmap", source: "heat",
+    paint: {
+      "heatmap-weight": 1,
+      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 6, 1.4, 12, 3],
+      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 10, 4, 18, 9, 28, 14, 40],
+      "heatmap-opacity": 0.85,
+      "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
+        0, "rgba(0,0,0,0)", 0.15, "rgba(45,212,191,0.55)", 0.35, "#22c55e", 0.55, "#facc15", 0.75, "#f97316", 1, "#dc2626"],
+    },
+  }, firstPinLayer);
+  applyHeatMode();
   updateVisited();
   if (state.routeData) map.getSource("route").setData(state.routeData);
+}
+
+function applyHeatMode() {
+  const map = state.map;
+  if (!map || !map.getLayer("heat")) return;
+  const heat = store.get("fg_heat") === "1";
+  map.setLayoutProperty("heat", "visibility", heat ? "visible" : "none");
+  for (const id of ["clusters", "photo"]) map.setLayoutProperty(id, "visibility", heat ? "none" : "visible");
+  const b = $("heatBtn");
+  b.textContent = heat ? "📍" : "🔥";
+  b.title = heat ? "Pinnadeln zeigen" : "Heatmap zeigen";
+  b.setAttribute("aria-label", b.title);
 }
 
 async function initMap() {
@@ -321,6 +348,8 @@ function applyFilter(fit = false) {
       && (!yearFrom || (p[5] || 0) >= yearFrom) && (!yearTo || (p[5] || 9999) <= yearTo));
   const src = state.map && state.map.getSource("photos");
   if (src) src.setData(geojson(state.filtered));
+  const heat = state.map && state.map.getSource("heat");
+  if (heat) heat.setData(geojson(state.filtered));
   updateVisited();
   if (!$("stats").classList.contains("hidden")) loadStats();
   const n = state.filtered.length;
@@ -390,6 +419,16 @@ $$(".seg button").forEach(b => b.addEventListener("click", () => {
 }));
 $("homeBtn").addEventListener("click", () => flyHome());
 $("mapBtn").addEventListener("click", () => switchMapMode());
+$("heatBtn").addEventListener("click", () => {
+  const on = store.get("fg_heat") !== "1";
+  store.set("fg_heat", on ? "1" : "0");
+  applyHeatMode();
+  if (on && !store.get("fg_heat_hint")) {
+    notice("Heatmap: je wärmer die Farbe, desto mehr Fotos. Zum Öffnen der Fotos wieder auf 📍 Pinnadeln umschalten.");
+    store.set("fg_heat_hint", "1");
+    setTimeout(() => notice(""), 6000);
+  }
+});
 
 // ---------- Galerie einer Pinnadel ----------
 const thumbQueue = { active: 0, waiting: [], max: 6 };
@@ -990,12 +1029,19 @@ function flyToBbox(b) {
   const pad = 0.02;  // ein einzelner Punkt soll nicht bis ins letzte Haus zoomen
   if (e - w < pad) { w -= pad; e += pad; }
   if (n - s < pad) { s -= pad; n += pad; }
+  state.map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });  // Reste der Kamerafahrt entfernen
   const narrow = window.innerWidth < 720;
   const leftOpen = !$("trips").classList.contains("hidden") || !$("stats").classList.contains("hidden");
   const top = narrow ? document.querySelector(".topbar").getBoundingClientRect().bottom + 40 : 110;
-  state.map.fitBounds([[w, s], [e, n]], { padding: narrow ? { top, bottom: window.innerHeight * 0.62 + 20, left: 40, right: 40 }
-                                                          : { top, bottom: 60, left: leftOpen ? 430 : 60, right: 460 },
-                                          maxZoom: state.styleOnline ? 13 : 6, duration: 1800 });
+  const playing = document.body.classList.contains("playing");
+  const fitPad = playing ? { top: 60, bottom: 140, left: 40, right: 40 }
+    : narrow ? { top, bottom: window.innerHeight * 0.62 + 20, left: 40, right: 40 }
+    : { top, bottom: 60, left: leftOpen ? 430 : 60, right: 460 };
+  try {
+    state.map.fitBounds([[w, s], [e, n]], { padding: fitPad, maxZoom: state.styleOnline ? 13 : 6, duration: 1800 });
+  } catch (err) {  // Fenster zu klein für die Abstände → einfach mittig hinfliegen
+    state.map.flyTo({ center: [(w + e) / 2, (s + n) / 2], zoom: 4, duration: 1800 });
+  }
 }
 
 // Land oder Ort: hinfliegen und die Galerie öffnen
@@ -1160,7 +1206,7 @@ function renderTrips() {
   let year = null;
   for (const t of visible) {
     const y = t.start.slice(0, 4);
-    if (y !== year) { html += `<h3>${y}</h3>`; year = y; }
+    if (y !== year) { html += `<h3 class="yearHead">${y} <button class="mini" data-playyear="${y}" title="Alle Reisen ${y} nachspielen">▶ Jahresrückblick</button></h3>`; year = y; }
     html += row(t);
   }
   if (hidden.length) {
@@ -1170,6 +1216,11 @@ function renderTrips() {
   html += `<p style="margin-top:18px"><button class="mini danger" id="tripsReset">Alle Änderungen an Reisen zurücksetzen</button></p>`;
   body.innerHTML = html;
   $$("#tripsBody [data-trip]").forEach(b => b.addEventListener("click", () => openTrip(Number(b.dataset.trip))));
+  $$("#tripsBody [data-playyear]").forEach(b => b.addEventListener("click", () => {
+    const y = b.dataset.playyear;
+    const ids = visible.filter(t => t.start.slice(0, 4) === y).sort((a, c) => a.start.localeCompare(c.start)).map(t => t.id);
+    startPlayer(ids, `Jahresrückblick ${y}`);
+  }));
   $$("#tripsBody img[data-cover]").forEach(img => queueThumb(img, img.dataset.cover));
   $("homePick").addEventListener("click", pickHome);
   if ($("homeAuto")) $("homeAuto").addEventListener("click", async () => { tripsState.data = await api("home", { method: "PUT", body: { auto: true } }); renderTrips(); });
@@ -1221,7 +1272,10 @@ function renderTripDetail() {
       <div><b>${t.route.length}</b>Halt${t.route.length === 1 ? "" : "e"}</div>
       <div><b>${t.countries.map(c => flag(c.cc)).join(" ")}</b>${t.countries.map(c => esc(c.name)).join(", ")}</div>
     </div>
-    <button class="primary" id="tripPhotos" style="margin-top:10px;width:100%">🖼 Fotos ansehen</button>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="tripPlay" style="flex:1">▶ Reise nachspielen</button>
+      <button id="tripPhotos" style="flex:1">🖼 Fotos ansehen</button>
+    </div>
     <h3>Route</h3>
     <ol class="stops">${t.route.map((s, i) => `<li><button data-stop="${i}"><span class="day">Tag ${dayNo(s.first)}</span>
       <span>${esc(s.label || "Unterwegs")}</span><span class="n">${s.count}</span></button></li>`).join("")}</ol>
@@ -1239,6 +1293,7 @@ function renderTripDetail() {
     <div class="err" id="tripErr"></div>`;
   const err = (e) => { $("tripErr").textContent = e.message; };
   $("tripBack").addEventListener("click", () => { leaveTrip(); $("panel").classList.add("hidden"); loadTrips(); });
+  $("tripPlay").addEventListener("click", () => startPlayer([t.id], "", t.id));
   $("tripPhotos").addEventListener("click", () => {
     if (window.innerWidth < 720) $("trips").classList.add("hidden");
     openPanel(t.ids, null, null, t.count, t.title);

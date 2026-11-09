@@ -52,6 +52,7 @@
     <div class="tools">
       <button id="tripsBtn" title="Reisen" aria-label="Reisen">🧳</button>
       <button id="statsBtn" title="Statistik" aria-label="Statistik">📊</button>
+      <button id="heatBtn" title="Heatmap zeigen" aria-label="Heatmap zeigen">🔥</button>
       <button id="mapBtn" class="hidden" title="Satellitenbild zeigen" aria-label="Satellitenbild zeigen">🛰️</button>
       <button id="homeBtn" title="Ganze Welt zeigen" aria-label="Ganze Welt zeigen">⟲</button>
       <button id="menuBtn" title="Menü" aria-label="Menü">☰</button>
@@ -104,6 +105,27 @@
   </div>
 </section>
 
+<!-- Reise nachspielen -->
+<div id="player" class="player hidden" aria-live="polite">
+  <div class="pIntro hidden" id="pIntro"><div><small id="pIntroSub"></small><b id="pIntroTitle"></b><span id="pIntroDates"></span></div></div>
+  <figure class="pSlide hidden" id="pSlide">
+    <img id="pImgA" alt=""><img id="pImgB" alt="">
+    <figcaption id="pCaption"></figcaption>
+  </figure>
+  <div class="pBar">
+    <div class="pInfo"><b id="pTitle"></b><span id="pStop"></span></div>
+    <div class="pProgress"><i id="pProgress"></i></div>
+    <div class="pCtrls">
+      <button id="pPrev" title="Zurück (←)" aria-label="Zurück">⏮</button>
+      <button id="pPlay" title="Pause (Leertaste)" aria-label="Pause">⏸</button>
+      <button id="pNext" title="Weiter (→)" aria-label="Weiter">⏭</button>
+      <select id="pSpeed" aria-label="Tempo"><option value="0.6">Langsam</option><option value="1" selected>Normal</option><option value="1.8">Schnell</option></select>
+      <button id="pFull" title="Vollbild (F)" aria-label="Vollbild">⛶</button>
+      <button id="pClose" title="Beenden (Esc)" aria-label="Beenden">✕</button>
+    </div>
+  </div>
+</div>
+
 <!-- Großansicht -->
 <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
   <button class="lbClose icon" id="lbClose" aria-label="Schließen">✕</button>
@@ -135,5 +157,6 @@
 
 <script src="static/vendor/maplibre-gl.js?v={{v}}"></script>
 <script src="static/app.js?v={{v}}"></script>
+<script src="static/player.js?v={{v}}"></script>
 </body>
 </html>
