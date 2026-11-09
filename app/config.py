@@ -22,10 +22,10 @@ class Settings:
         # Öffentliche Adresse (Reverse Proxy); leer = aus dem Aufruf abgeleitet
         self.public_url = os.environ.get("FG_PUBLIC_URL", "").strip().rstrip("/")
         self.root_path = os.environ.get("FG_ROOT_PATH", "").rstrip("/")
-        self.host = os.environ.get("FG_HOST", "0.0.0.0")
+        self.host = os.environ.get("FG_HOST", "127.0.0.1")
         self.port = int(os.environ.get("FG_PORT", "8790"))
         self.cookie_secure = _bool("FG_COOKIE_SECURE", False)
-        self.session_days = int(os.environ.get("FG_SESSION_DAYS", "30"))
+        self.session_days = int(os.environ.get("FG_SESSION_DAYS", "7"))
         # Ordner der DSM-Oberfläche (ui/), dort liegt app.json fürs DSM-Fenster
         self.ui_dir = os.environ.get("FG_UI_DIR", "")
         # Hintergrund-Aufgaben (nächtlicher Scan, Sicherung); in Tests aus

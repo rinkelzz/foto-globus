@@ -16,7 +16,9 @@ start_daemon() {
     [ -f "${CONFIG}" ] && . "${CONFIG}"
     export FG_DATA_DIR="${PKGVAR}"
     export FG_PORT="${FG_PORT:-8790}"
-    export FG_HOST="${FG_HOST:-0.0.0.0}"
+    # Standard: nur auf der NAS selbst (DSM-Fenster über app.cgi, Reverse Proxy, Paket-Zentrum).
+    # Direkter Zugriff aus dem Netzwerk (http://nas:PORT) lässt sich in den Einstellungen einschalten.
+    export FG_HOST="${FG_HOST:-127.0.0.1}"
     export FG_PUBLIC_URL FG_ROOT_PATH FG_COOKIE_SECURE FG_TIMEZONE
     export FG_UI_DIR="${PKGDEST}/ui"
     PYTHONPATH="$(lib_path "$PY" "$TAG")"

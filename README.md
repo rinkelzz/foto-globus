@@ -105,7 +105,9 @@ Ein Paket für alle Modelle: Intel/AMD sowie ARMv8 und ARMv7.
 4. Den Foto-Globus im DSM-Hauptmenü öffnen. Direkt nach der Installation sucht er einmal nach Fotos; den Stand
    siehst du als Admin unter **☰ → Einstellungen → Suche**.
 
-Die App läuft auf Port **8790** (änderbar, siehe unten) und ist auch direkt unter `http://<nas>:8790` erreichbar.
+Die App läuft auf Port **8790** (änderbar, siehe unten) und ist aus Sicherheitsgründen **nur auf der NAS selbst**
+erreichbar: über das DSM-Fenster, einen Reverse Proxy und das Paket-Zentrum. Direkten Zugriff über
+`http://<nas>:8790` (unverschlüsselt) kann man unter Einstellungen → Karte & Anmeldung einschalten.
 
 ### Von unterwegs (Reverse Proxy)
 
@@ -148,8 +150,9 @@ Synology-Update nicht mehr, öffnet sich Synology Photos im richtigen Bereich st
   hinzufügen. Danach bietet das Paket-Zentrum neue Versionen selbst an.
 - **Sicherung:** Jede Nacht (Uhrzeit einstellbar) – im Paketordner (die letzten 7) und auf Wunsch in einem
   freigegebenen Ordner wie `/volume1/backup/fotoglobus`, den Hyper Backup mitsichern kann. Der Paketbenutzer
-  `fotoglobus` braucht dort **Lesen/Schreiben** (Berechtigungen → „Interner Systembenutzer“). Gesichert werden Index, Einstellungen und Benutzer – die Fotos selbst
-  sichert Hyper Backup über die Fotoordner.
+  `fotoglobus` braucht dort **Lesen/Schreiben** (Berechtigungen → „Interner Systembenutzer“). Diesen Ordner **nur
+  für Admins** freigeben. Gesichert werden Einstellungen, Benutzer, Zuhause und bearbeitete Reisen – nicht der
+  Fotoindex (wird nach dem Wiederherstellen neu eingelesen) und nicht die Fotos selbst (die sichert Hyper Backup).
 - **Port:** unter **Karte & Anmeldung → Port** ändern; gilt nach dem Neustart des Pakets (Paket-Zentrum → Stoppen →
   Ausführen). Reverse Proxy und Firewall ggf. anpassen.
 

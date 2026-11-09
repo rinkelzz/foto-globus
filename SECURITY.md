@@ -19,7 +19,9 @@ Unterstützt wird jeweils die neueste Version unter [Releases](https://github.co
 
 ## Hinweise für den Betrieb
 
-- Die App nur per **HTTPS** (Reverse Proxy mit Zertifikat) nach außen freigeben, nie Port 8790 direkt.
+- Die App lauscht standardmäßig nur auf **127.0.0.1** (DSM-Fenster, Reverse Proxy und Paket-Zentrum auf der NAS).
+  Direkten Zugriff aus dem Netzwerk nur einschalten, wenn nötig – er ist unverschlüsselt (http).
+- Nach außen nur per **HTTPS** (Reverse Proxy mit Zertifikat) freigeben, nie Port 8790 direkt.
 - Der Reverse Proxy sollte der von DSM auf derselben NAS sein: Nur Anfragen von 127.0.0.1 dürfen die echte
   Absenderadresse (`X-Forwarded-For`) mitliefern. Bei einem Proxy auf einem anderen Gerät greift die Login-Sperre
   (5 Fehlversuche pro Adresse, 10 pro Benutzername in 15 Minuten) nur noch pro Benutzername.
@@ -28,15 +30,19 @@ Unterstützt wird jeweils die neueste Version unter [Releases](https://github.co
 - Änderungen per Login-Cookie werden nur von der eigenen Seite angenommen (Schutz vor CSRF über `Sec-Fetch-Site`
   bzw. `Origin`). Läuft die App hinter einem Proxy, der den `Host`-Header umschreibt, die **Öffentliche Adresse**
   in den Einstellungen eintragen.
-- Der Schlüssel für das DSM-Fenster (`.proxy_secret` im Paketordner) wird nur von Verbindungen über 127.0.0.1 ohne
-  `X-Forwarded-For` angenommen, also nur von `app.cgi` auf der NAS selbst.
+- Der Schlüssel für das DSM-Fenster (`.proxy_secret` im Paketordner) ist nur für den Paketbenutzer lesbar (`0600`)
+  und wird nur von Verbindungen über 127.0.0.1 ohne `X-Forwarded-For` angenommen, also nur von `app.cgi` auf der
+  NAS selbst.
+- Gemeinsame Fotos werden nach den DSM-Ordnerrechten gezeigt; das Ergebnis wird höchstens 5 Minuten
+  zwischengespeichert. Anmeldungen per Passwort laufen nach 7 Tagen ab.
 - Die Kartenbilder lädt der Browser vom eingestellten Kartendienst (Standard: OpenFreeMap). Der sieht, welche Gegend
   angezeigt wird, aber keine Fotos und keine Foto-Koordinaten. Wer das nicht möchte, lässt „Kartenstil“ leer – dann
   zeigt der Globus nur die eingebaute Offline-Kugel.
 - Updates kommen aus den GitHub-Releases dieses Repos. Sie sind nicht zusätzlich signiert – geschützt sind sie durch
   HTTPS und das (per Zwei-Faktor gesicherte) GitHub-Konto des Maintainers.
-- Der Foto-Globus speichert keine Zugangsdaten (kein Mailversand). Die Datensicherungen enthalten Index,
-  Einstellungen, Benutzer und Sitzungen (nur als Hash).
+- Der Foto-Globus speichert keine Zugangsdaten (kein Mailversand). Die Datensicherungen enthalten Einstellungen,
+  Benutzer (lokales Admin-Passwort nur als PBKDF2-Hash), Zuhause und bearbeitete Reisen – **keine** Sitzungen und
+  **keinen** Fotoindex. Den Sicherungsordner trotzdem nur für Admins freigeben.
 
 # Security (English)
 

@@ -25,35 +25,51 @@ EDITABLE = ("public_url", "dsm_login", "dsm_auto_create", "dsm_admins", "dsm_url
 CONFIG_ENV = "config.env"  # liegt im Datenordner des Pakets (/var/packages/fotoglobus/var), liest das Start-Skript
 
 
-def configured_port() -> int:
-    """Port laut config.env (gilt nach dem nächsten Paket-Neustart) – sonst der laufende."""
+def _env_value(key: str) -> Optional[str]:
     try:
         text = (settings.data_dir / CONFIG_ENV).read_text(encoding="utf-8")
     except OSError:
-        return settings.port
-    m = re.search(r'^FG_PORT="?(\d+)"?\s*$', text, re.M)
-    return int(m.group(1)) if m else settings.port
+        return None
+    m = re.search(rf'^{key}="?([^"\n]*)"?\s*$', text, re.M)
+    return m.group(1) if m else None
 
 
-def write_port(port: int) -> None:
+def configured_port() -> int:
+    """Port laut config.env (gilt nach dem nächsten Paket-Neustart) – sonst der laufende."""
+    v = _env_value("FG_PORT")
+    return int(v) if v and v.isdigit() else settings.port
+
+
+def configured_lan() -> bool:
+    """Direkt im Netzwerk erreichbar (0.0.0.0) laut config.env – Standard: nur auf der NAS selbst."""
+    return (_env_value("FG_HOST") or "127.0.0.1") == "0.0.0.0"
+
+
+def write_env(key: str, value: str) -> None:
     path = settings.data_dir / CONFIG_ENV
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
         text = "# Foto-Globus – Einstellungen. Nach Änderungen das Paket neu starten.\n"
-    if re.search(r"^FG_PORT=.*$", text, re.M):
-        text = re.sub(r"^FG_PORT=.*$", f"FG_PORT={port}", text, flags=re.M)
+    if re.search(rf"^{key}=.*$", text, re.M):
+        text = re.sub(rf"^{key}=.*$", f"{key}={value}", text, flags=re.M)
     else:
-        text = text.rstrip("\n") + f"\nFG_PORT={port}\n"
+        text = text.rstrip("\n") + f"\n{key}={value}\n"
     tmp = path.with_name(CONFIG_ENV + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
+
+
+def write_port(port: int) -> None:
+    write_env("FG_PORT", str(port))
 
 
 def _settings_out(conn: sqlite3.Connection) -> dict:
     out = {k: get_setting(conn, k) for k in EDITABLE}
     out["port"] = settings.port
     out["port_configured"] = configured_port()
+    out["lan_access"] = settings.host == "0.0.0.0"
+    out["lan_access_configured"] = configured_lan()
     out["detected"] = {"shared_root": scanner.shared_root(conn), "homes_root": scanner.homes_root(conn)}
     out["roots"] = [{"scope": r.scope, "path": r.path, "owner": r.owner} for r in scanner.roots(conn)]
     return out
@@ -80,6 +96,7 @@ class SettingsIn(BaseModel):
     map_style: Optional[str] = Field(None, max_length=300)
     theme_default: Optional[str] = None
     port: Optional[int] = Field(None, ge=1024, le=65535, description="gilt nach Neustart des Pakets")
+    lan_access: Optional[bool] = Field(None, description="direkt im Netzwerk erreichbar; gilt nach Neustart des Pakets")
     satellite: Optional[str] = Field(None, pattern="^(esri|maptiler|off)$")
     maptiler_key: Optional[str] = Field(None, max_length=64)
     photos_url: Optional[str] = Field(None, max_length=300)
@@ -101,6 +118,13 @@ def update_settings(data: SettingsIn, admin=Depends(admin_user), conn: sqlite3.C
     changes = data.model_dump(exclude_unset=True)
     for key, value in changes.items():
         if value is None:
+            continue
+        if key == "lan_access":
+            if value != configured_lan():
+                try:
+                    write_env("FG_HOST", "0.0.0.0" if value else "127.0.0.1")
+                except OSError as e:
+                    raise HTTPException(500, f"config.env nicht schreibbar: {e}")
             continue
         if key == "port":
             if value != configured_port():

@@ -873,6 +873,9 @@ async function tabGeneral(body) {
       <fieldset><legend>Adresse &amp; Port</legend>
         <label>Öffentliche Adresse (Reverse Proxy) <input id="gPublic" value="${esc(s.public_url)}" placeholder="https://fotos.meinedomain.de"></label>
         <p class="muted small">Für das DSM-Fenster bei https-DSM und für den Zugriff von unterwegs.</p>
+        ${chk("gLan", s.lan_access_configured, "Direkt im Netzwerk erreichbar (http://nas:Port, unverschlüsselt)")}
+        <p class="muted small">Aus = nur auf der NAS selbst: DSM-Fenster, Reverse Proxy und Paket-Zentrum funktionieren weiter.
+          ${s.lan_access_configured !== s.lan_access ? "<b>Gilt nach dem Neustart des Pakets.</b>" : "Änderung gilt nach dem Neustart des Pakets."}</p>
         <label>Port <input id="gPort" type="number" min="1024" max="65535" value="${s.port_configured}"></label>
         <p class="muted small">Läuft gerade auf Port ${s.port}.${s.port_configured !== s.port ? ` <b>Port ${s.port_configured} gilt nach dem Neustart des Pakets</b> (Paket-Zentrum → Foto-Globus → Stoppen/Ausführen).` : " Eine Änderung gilt nach dem Neustart des Pakets; Reverse Proxy und Firewall ggf. anpassen."}</p>
       </fieldset>
@@ -882,11 +885,11 @@ async function tabGeneral(body) {
     const r = await saveSettings({
       map_style: $("gStyle").value.trim(), dsm_login: $("gDsmLogin").checked, dsm_auto_create: $("gAuto").checked,
       dsm_admins: $("gAdmins").checked, dsm_url: $("gDsmUrl").value.trim(), public_url: $("gPublic").value.trim(),
-      port: Number($("gPort").value),
+      port: Number($("gPort").value), lan_access: $("gLan").checked,
       satellite: ($$("[name=gSat]").find(x => x.checked) || {}).value || "esri",
       maptiler_key: $("gMtKey").value.trim(), photos_url: $("gPhotosUrl").value.trim(),
     }, $("gMsg"));
-    if (r && r.port_configured !== s.port_configured) tabGeneral(body);
+    if (r && (r.port_configured !== s.port_configured || r.lan_access_configured !== s.lan_access_configured)) tabGeneral(body);
   });
 }
 
@@ -939,7 +942,9 @@ async function tabBackup(body) {
         <label>Uhrzeit <select id="bHour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === b.hour ? " selected" : ""}>${String(h).padStart(2, "0")}:00 Uhr</option>`).join("")}</select></label>
         <label>Freigegebener Ordner (für Hyper Backup) <input id="bDir" value="${esc(b.dir)}" placeholder="z. B. /volume1/backup/fotoglobus"></label>
         <label>Dort aufheben (Tage) <input id="bKeep" type="number" min="1" max="3650" value="${b.keep_days}"></label>
-        <p class="muted small">Gesichert werden Index, Einstellungen und Benutzer – nicht die Fotos selbst (die sichert Hyper Backup über die Fotoordner).
+        <p class="muted small">Gesichert werden Einstellungen, Benutzer, Zuhause und bearbeitete Reisen – nicht der Fotoindex
+          (er wird nach dem Wiederherstellen neu eingelesen) und nicht die Fotos selbst (die sichert Hyper Backup).
+          Den Sicherungsordner nur für Admins freigeben.
           Zusätzlich liegen die letzten ${b.local_keep} Sicherungen im Paketordner.</p>
         <div class="savebar"><button class="primary" id="bSave">Speichern</button><span id="bMsg"></span></div>
       </fieldset>
@@ -972,7 +977,7 @@ async function tabBackup(body) {
   $$("[data-rs]").forEach(x => x.addEventListener("click", async () => {
     const name = x.dataset.rs;
     if (prompt(`Wirklich zurückspielen? Der aktuelle Stand wird vorher gesichert.\nZur Bestätigung den Namen eingeben:\n${name}`) !== name) return;
-    try { const r = await api(`backups/${encodeURIComponent(name)}/restore`, { method: "POST", body: { confirm: name } }); out(`Wiederhergestellt. Vorheriger Stand gesichert als ${r.safety_backup}.`); loadPoints(); }
+    try { const r = await api(`backups/${encodeURIComponent(name)}/restore`, { method: "POST", body: { confirm: name } }); out(`Wiederhergestellt. Vorheriger Stand gesichert als ${r.safety_backup}. Die Fotos werden jetzt neu eingelesen – das dauert einen Moment.`); loadPoints(); }
     catch (e) { out(e.message, true); }
   }));
 }

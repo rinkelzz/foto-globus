@@ -2,6 +2,21 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.5.1] – 2026-11-09
+
+### Sicherheit
+- **Schlüssel fürs DSM-Fenster** (`.proxy_secret`) ist nur noch für den Paketbenutzer lesbar (vorher für alle
+  lokalen Benutzer der NAS). Wer ihn lesen konnte, hätte sich gegenüber der App als beliebiger DSM-Benutzer ausgeben
+  können – allerdings nur von der NAS selbst aus.
+- **Nur noch auf der NAS selbst erreichbar** (127.0.0.1) statt im ganzen Netzwerk. DSM-Fenster, Reverse Proxy und
+  Paket-Zentrum funktionieren wie bisher. Direkter Zugriff über `http://nas:8790` lässt sich unter Einstellungen →
+  Karte & Anmeldung wieder einschalten (gilt nach Neustart des Pakets).
+- CSRF-Schutz vertraut `X-Forwarded-Host` nicht mehr.
+- Entzogene Ordnerrechte gelten nach spätestens **5 Minuten** (vorher 30).
+- Anmeldungen per Passwort laufen nach **7 Tagen** ab (vorher 30).
+- **Datensicherung ohne Sitzungen und ohne Fotoindex** (Pfade und Aufnahmeorte aller, auch persönlicher Fotos).
+  Nach dem Wiederherstellen startet die Suche automatisch; angemeldete Benutzer bleiben angemeldet.
+
 ## [0.5.0] – 2026-11-09
 
 ### Neu
@@ -80,6 +95,7 @@ Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versi
 - DSM-Fenster mit Single Sign-on, Anmeldung mit DSM-Konto (inkl. 2FA), vier Designs, Firmenname und Logo,
   nächtliche Sicherung mit Wiederherstellen, Änderungsprotokoll, Updates übers Paket-Zentrum, Port änderbar.
 
+[0.5.1]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.5.1
 [0.5.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.3.0

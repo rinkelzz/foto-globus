@@ -18,3 +18,15 @@ import pytest  # noqa: E402
 def _database():
     from app.db import init_db
     init_db()
+
+
+@pytest.fixture(autouse=True)
+def _wait_for_background_scan():
+    """Eine im Hintergrund gestartete Suche (z. B. nach dem Wiederherstellen) darf nicht in den nächsten Test laufen."""
+    yield
+    import time
+    from app import scanner
+    for _ in range(600):
+        if not scanner._lock.locked():
+            return
+        time.sleep(0.05)

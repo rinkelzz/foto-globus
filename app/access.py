@@ -3,7 +3,7 @@
 - **Persönliche Fotos** (/volumeX/homes/<benutzer>/Photos) sieht nur der Besitzer – wie in Synology Photos.
 - **Gemeinsame Fotos** (/volumeX/photo) richten sich nach den Ordnerrechten in DSM: Für jeden Ordner mit Fotos
   fragen wir DSM per `synoacltool -get-perm <ordner> <benutzer>`, ob der Benutzer lesen darf. Das Ergebnis wird
-  eine Weile zwischengespeichert. Wer einen übergeordneten Ordner nicht lesen darf, sieht auch darunter nichts.
+  5 Minuten zwischengespeichert. Wer einen übergeordneten Ordner nicht lesen darf, sieht auch darunter nichts.
 - Lässt sich ein Recht nicht ermitteln (Programm fehlt, unbekannte Ausgabe), gilt „kein Zugriff“ – sicher vor
   bequem. Admins können in den Einstellungen auf „alle angemeldeten DSM-Benutzer“ umstellen.
 """
@@ -17,7 +17,7 @@ from typing import Callable, Dict, Iterable, Optional, Set, Tuple
 
 from .config import settings
 
-CACHE_SECONDS = 30 * 60
+CACHE_SECONDS = 5 * 60  # entzogene Rechte gelten spätestens nach 5 Minuten
 USER_RE = re.compile(r"^[A-Za-z0-9._@\-\\ ]{1,64}$")
 
 _cache: Dict[Tuple[str, str], Tuple[bool, float]] = {}

@@ -55,3 +55,74 @@ def test_dsm_session_cannot_be_forged_by_local_account():
         assert r.status_code == 200
         assert c.get("/api/v1/me").json()["dsm_user"] is None
         assert c.get("/api/v1/points").status_code == 403
+
+
+def test_proxy_secret_file_only_for_package_user(tmp_path, monkeypatch):
+    from app.config import settings
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    monkeypatch.setattr(settings, "ui_dir", str(ui))
+    assert dsm_auth.publish_proxy_files()
+    assert oct((tmp_path / ".proxy_secret").stat().st_mode & 0o777) == "0o600"
+    assert oct((tmp_path / ".port").stat().st_mode & 0o777) == "0o644"
+
+
+def test_csrf_ignores_forwarded_host():
+    with TestClient(app) as c:
+        _admin(c)
+        r = c.patch("/api/v1/settings", json={"scan_hour": 4},
+                    headers={"Origin": "https://boese.example.org", "X-Forwarded-Host": "boese.example.org"})
+        assert r.status_code == 403
+
+
+def test_defaults_bind_local_and_short_sessions():
+    from app.config import Settings
+    s = Settings()
+    assert s.host == "127.0.0.1" and s.session_days == 7
+    from app import access
+    assert access.CACHE_SECONDS <= 5 * 60
+
+
+def test_lan_access_setting_writes_config_env():
+    from app.config import settings
+    from app.routers.admin import CONFIG_ENV
+    path = settings.data_dir / CONFIG_ENV
+    path.write_text("FG_PORT=8790\n", encoding="utf-8")
+    with TestClient(app) as c:
+        _admin(c)
+        assert c.get("/api/v1/settings").json()["lan_access_configured"] is False
+        r = c.patch("/api/v1/settings", json={"lan_access": True}).json()
+        assert r["lan_access_configured"] is True and "FG_HOST=0.0.0.0" in path.read_text()
+        c.patch("/api/v1/settings", json={"lan_access": False})
+        assert "FG_HOST=127.0.0.1" in path.read_text()
+    path.unlink()
+
+
+def test_backup_without_sessions_and_photo_index():
+    import gzip
+    import sqlite3
+    import tempfile
+    from app import backup
+    from app.db import connect
+    with connect() as conn:
+        conn.execute("INSERT OR IGNORE INTO photos(path, scope, owner, folder, name, size, mtime, lat, lon, added_at) "
+                     "VALUES ('/x/homes/anna/Photos/geheim.jpg', 'personal', 'anna', '/x', 'geheim.jpg', 1, 1, 52.4, 10.5, 'x')")
+    with TestClient(app) as c:
+        _admin(c)
+        name = c.post("/api/v1/backups").json()["name"]
+        raw = c.get(f"/api/v1/backups/{name}/download").content
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            f.write(gzip.decompress(raw))
+            f.flush()
+            db = sqlite3.connect(f.name)
+            assert db.execute("SELECT COUNT(*) FROM photos").fetchone()[0] == 0
+            assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+            assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= 1
+            assert b"geheim.jpg" not in gzip.decompress(raw)
+            db.close()
+        # Wiederherstellen: man bleibt angemeldet, die Suche startet von selbst
+        r = c.post(f"/api/v1/backups/{name}/restore", json={"confirm": name}).json()
+        assert r["scan_started"] is True
+        assert c.get("/api/v1/me").status_code == 200
+    with connect() as conn:
+        conn.execute("DELETE FROM photos WHERE name = 'geheim.jpg'")

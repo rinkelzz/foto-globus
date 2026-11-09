@@ -8,7 +8,10 @@
 - Wiederherstellen schreibt die Sicherung über dieselbe API in die laufende Datenbank zurück
   (vorher wird automatisch der aktuelle Stand gesichert) und bringt das Schema auf den neuesten Stand.
 - Zugangsdaten (SECRET_SETTINGS) kommen nicht in die Sicherung. Derzeit speichert der Foto-Globus keine.
-- Die Fotos selbst sichert Hyper Backup über die Fotoordner – hier geht es nur um Index, Einstellungen, Benutzer.
+- Ebenfalls nicht in der Sicherung: Sitzungen und der Fotoindex (Pfade und Aufnahmeorte aller Fotos, auch der
+  persönlichen). Der Index baut sich nach dem Wiederherstellen durch eine Suche von selbst neu auf.
+- Gesichert werden Benutzer, Einstellungen, Zuhause, bearbeitete Reisen und das Änderungsprotokoll.
+- Die Fotos selbst sichert Hyper Backup über die Fotoordner.
 """
 import gzip
 import os
@@ -67,8 +70,10 @@ SECRET_SETTINGS: tuple = ()
 
 
 def _strip_secrets(db: sqlite3.Connection) -> None:
-    """Zugangsdaten in der Sicherungskopie leeren – und per VACUUM auch aus freien Seiten entfernen."""
+    """Zugangsdaten, Sitzungen und Fotoindex aus der Sicherungskopie entfernen – per VACUUM auch aus freien Seiten."""
     db.execute("PRAGMA secure_delete = ON")
+    for table in ("sessions", "photos"):
+        db.execute(f"DELETE FROM {table}")
     if SECRET_SETTINGS:
         db.executemany("UPDATE app_settings SET value = '' WHERE key = ?", [(k,) for k in SECRET_SETTINGS])
     db.commit()
@@ -249,6 +254,9 @@ def restore(name: str, actor_id: Optional[int] = None) -> Dict:
             try:
                 # Zugangsdaten stehen nicht in der Sicherung → auf derselben NAS die aktuellen behalten
                 kept = {k: get_setting(live, k) for k in SECRET_SETTINGS}
+                # Sitzungen stehen nicht in der Sicherung → angemeldete Benutzer bleiben angemeldet
+                sessions = live.execute("SELECT s.token_hash, s.created_at, s.expires_at, s.dsm_user, u.username "
+                                        "FROM sessions s JOIN users u ON u.id = s.user_id").fetchall()
                 src.backup(live)
                 live.row_factory = sqlite3.Row
                 migrate(live)  # ältere Sicherung → aktuelles Schema
@@ -256,13 +264,19 @@ def restore(name: str, actor_id: Optional[int] = None) -> Dict:
                     if v and not get_setting(live, k):
                         live.execute("INSERT INTO app_settings(key, value) VALUES (?, ?) "
                                      "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (k, v))
+                for s in sessions:
+                    u = live.execute("SELECT id FROM users WHERE username = ? AND active = 1", (s[4],)).fetchone()
+                    if u:
+                        live.execute("INSERT OR IGNORE INTO sessions(token_hash, user_id, created_at, expires_at, dsm_user) "
+                                     "VALUES (?, ?, ?, ?, ?)", (s[0], u[0], s[1], s[2], s[3]))
                 audit(live, actor_id, "backup_restored", name, f"vorher gesichert als {before['name']}")
             finally:
                 src.close()
                 live.close()
-    from . import access
+    from . import access, scanner
     access.clear_cache()
-    return {"restored": name, "safety_backup": before["name"]}
+    scanner.start_background("wiederherstellen", actor_id)  # Fotoindex steht nicht in der Sicherung
+    return {"restored": name, "safety_backup": before["name"], "scan_started": True}
 
 
 def due(conn: sqlite3.Connection, now_local: datetime) -> bool:
