@@ -156,7 +156,8 @@ def _scan_out(conn: sqlite3.Connection) -> dict:
                           "SUM(scope = 'shared') AS shared, SUM(scope = 'personal') AS personal FROM photos").fetchone()
     return {**scanner.status(), "runs": runs,
             "totals": {"photos": totals["n"] or 0, "with_gps": totals["gps"] or 0,
-                       "shared": totals["shared"] or 0, "personal": totals["personal"] or 0}}
+                       "shared": totals["shared"] or 0, "personal": totals["personal"] or 0,
+                       "duplicates": scanner.duplicate_count(conn)}}
 
 
 @router.get("/scan")

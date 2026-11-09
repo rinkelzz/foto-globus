@@ -149,7 +149,7 @@ def _scan_root(conn: sqlite3.Connection, root: Root, run_id: int, stats: Dict, e
                     conn.execute(
                         "UPDATE photos SET scope=?, owner=?, folder=?, name=?, size=?, mtime=?, kind=?, taken_at=?, year=?,"
                         " lat=?, lon=?, alt=?, make=?, model=?, width=?, height=?, orientation=?, media=?, duration=?,"
-                        " seen_scan=?, place=NULL, cc=NULL, geocoded=0 WHERE id=?",
+                        " seen_scan=?, place=NULL, cc=NULL, geocoded=0, hash=NULL WHERE id=?",
                         vals + (old[0],))
                     stats["files_changed"] += 1
                 else:
@@ -232,6 +232,8 @@ def run(trigger: str = "manuell", actor_id: Optional[int] = None, _locked: bool 
                 stats["files_removed"] += _forget_vanished_roots(conn, all_roots)
                 _state["root"] = "Ortsnamen"
                 geocode_pending(conn)
+                _state["root"] = "Doppelte Fotos"
+                hash_candidates(conn, errors)
         except Exception as e:  # noqa: BLE001 – Scan-Fehler dürfen die App nicht stören
             status = "fehler"
             errors.append(f"{type(e).__name__}: {e}")
@@ -253,6 +255,58 @@ def run(trigger: str = "manuell", actor_id: Optional[int] = None, _locked: bool 
         conn.close()
         _state.update(running=False, root=None)
         _lock.release()
+
+
+FULL_HASH_LIMIT = 64 * 1024 * 1024   # größere Dateien (Videos): Stichproben statt ganz lesen
+SAMPLE = 1024 * 1024
+
+
+def file_hash(path: str) -> str:
+    """Prüfsumme für den Vergleich exakter Kopien. Bis 64 MB über die ganze Datei, darüber über Größe + Anfang,
+    Mitte und Ende (je 1 MB) – zwei verschiedene Videos stimmen darin praktisch nie überein."""
+    import hashlib
+    h = hashlib.sha256()
+    with exif.open_nofollow(path) as f:
+        size = os.fstat(f.fileno()).st_size
+        if size <= FULL_HASH_LIMIT:
+            for chunk in iter(lambda: f.read(SAMPLE), b""):
+                h.update(chunk)
+            return "f" + h.hexdigest()[:40]
+        h.update(str(size).encode())
+        for off in (0, size // 2, size - SAMPLE):
+            f.seek(off)
+            h.update(f.read(SAMPLE))
+        return "s" + h.hexdigest()[:40]
+
+
+def hash_candidates(conn: sqlite3.Connection, errors: Optional[List[str]] = None) -> int:
+    """Prüfsummen nur für Dateien, deren Größe mehrfach vorkommt – nur die können exakte Kopien sein."""
+    rows = conn.execute(
+        "SELECT id, path FROM photos WHERE hash IS NULL AND size IN "
+        "(SELECT size FROM photos GROUP BY size HAVING COUNT(*) > 1) ORDER BY size").fetchall()
+    done = 0
+    for i in range(0, len(rows), 200):
+        if _cancel.is_set():
+            break
+        updates = []
+        for r in rows[i:i + 200]:
+            try:
+                updates.append((file_hash(r["path"]), r["id"]))
+            except OSError as e:
+                if errors is not None:
+                    errors.append(f"{r['path']}: {e.strerror or e}")
+            _state["done"] = done + len(updates)
+        conn.execute("BEGIN")
+        conn.executemany("UPDATE photos SET hash = ? WHERE id = ?", updates)
+        conn.execute("COMMIT")
+        done += len(updates)
+    return done
+
+
+def duplicate_count(conn: sqlite3.Connection) -> int:
+    """Wie viele Dateien sind überzählige Kopien (bei 3 gleichen Dateien: 2)?"""
+    return conn.execute("SELECT COALESCE(SUM(c - 1), 0) FROM (SELECT COUNT(*) AS c FROM photos WHERE hash IS NOT NULL "
+                        "GROUP BY size, hash HAVING c > 1)").fetchone()[0]
 
 
 def geocode_pending(conn: sqlite3.Connection) -> int:
@@ -279,23 +333,30 @@ def geocode_pending(conn: sqlite3.Connection) -> int:
 
 
 def geocode_due() -> None:
-    """Nach einem Update auf 0.2: vorhandene Fotos bekommen ihre Ortsnamen, ohne auf den nächsten Scan zu warten."""
+    """Nach einem Update: vorhandene Fotos bekommen Ortsnamen (0.2) und Prüfsummen für doppelte (0.5),
+    ohne auf die nächste nächtliche Suche zu warten."""
     if _lock.locked():
         return
     conn = connect()
     try:
         pending = conn.execute("SELECT 1 FROM photos WHERE geocoded = 0 AND lat IS NOT NULL LIMIT 1").fetchone()
+        unhashed = conn.execute("SELECT 1 FROM photos WHERE hash IS NULL AND size IN "
+                                "(SELECT size FROM photos GROUP BY size HAVING COUNT(*) > 1) LIMIT 1").fetchone()
     finally:
         conn.close()
-    if not pending or not _lock.acquire(blocking=False):
+    if not (pending or unhashed) or not _lock.acquire(blocking=False):
         return
     _cancel.clear()
     conn = connect()
     try:
         _state.update(running=True, root="Ortsnamen", done=0, started=time.time())
-        n = geocode_pending(conn)
+        n = geocode_pending(conn) if pending else 0
         if n:
             audit(conn, None, "geocode", "scan", f"{n} Fotos mit Ortsnamen versehen")
+        _state.update(root="Doppelte Fotos", done=0)
+        h = hash_candidates(conn) if unhashed else 0
+        if h:
+            audit(conn, None, "duplicates", "scan", f"{h} Dateien geprüft, {duplicate_count(conn)} doppelt")
     finally:
         conn.close()
         _state.update(running=False, root=None)

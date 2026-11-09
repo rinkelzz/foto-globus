@@ -765,6 +765,7 @@ async function tabScan(body) {
         <div class="stat"><b>${nf.format(t.with_gps)}</b>mit Aufnahmeort</div>
         <div class="stat"><b>${nf.format(t.shared)}</b>gemeinsam</div>
         <div class="stat"><b>${nf.format(t.personal)}</b>persönlich</div>
+        <div class="stat" title="Exakte Kopien (gleicher Inhalt) werden auf dem Globus, in Galerie, Statistik und Reisen nur einmal gezählt – die eigene Kopie zuerst."><b>${nf.format(t.duplicates || 0)}</b>doppelte Dateien (nur einmal gezeigt)</div>
       </div>
       <div class="row">${s.running
         ? `<b>Suche läuft …</b> <span class="muted">${nf.format(s.files_done || 0)} Dateien, ${s.seconds || 0} s</span> <span class="muted small">${esc(s.root || "")}</span> <button id="scanStop" class="danger">Abbrechen</button>`

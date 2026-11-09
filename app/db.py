@@ -6,7 +6,7 @@ from typing import Iterator
 from .config import settings
 from .timeutil import now_utc_str
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -167,6 +167,11 @@ def migrate(conn: sqlite3.Connection) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner, start_day);
         """)
+    if version < 4:
+        # 0.5.0: doppelte Dateien erkennen – Prüfsumme nur für Dateien, deren Größe mehrfach vorkommt
+        if "hash" not in _columns(conn, "photos"):
+            conn.execute("ALTER TABLE photos ADD COLUMN hash TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_photos_size ON photos(size, hash)")
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 

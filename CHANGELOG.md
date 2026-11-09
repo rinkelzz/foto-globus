@@ -2,6 +2,16 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.5.0] – 2026-11-09
+
+### Neu
+- **Doppelte Fotos nur einmal:** Exakte Kopien (gleiche Größe und Prüfsumme) erscheinen auf dem Globus, in Galerie,
+  Statistik, Suche und Reisen nur einmal. Liegt ein Foto auch im eigenen Bereich, zählt die eigene Kopie, sonst die
+  älteste Datei. Die Dateien selbst bleiben unberührt.
+- Prüfsummen werden nur für Dateien berechnet, deren Größe mehrfach vorkommt (nur die können Kopien sein); große
+  Videos über Stichproben. Nach dem Update läuft das einmal im Hintergrund, danach bei jeder Suche nur für Neues.
+- Unter Einstellungen → Suche steht, wie viele doppelte Dateien es gibt.
+
 ## [0.4.0] – 2026-11-09
 
 ### Neu
@@ -70,6 +80,7 @@ Alle nennenswerten Änderungen an diesem Projekt. Versionen nach [Semantic Versi
 - DSM-Fenster mit Single Sign-on, Anmeldung mit DSM-Konto (inkl. 2FA), vier Designs, Firmenname und Logo,
   nächtliche Sicherung mit Wiederherstellen, Änderungsprotokoll, Updates übers Paket-Zentrum, Port änderbar.
 
+[0.5.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rinkelzz/foto-globus/releases/tag/v0.2.0

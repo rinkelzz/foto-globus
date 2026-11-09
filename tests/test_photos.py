@@ -377,3 +377,45 @@ def test_satellite_and_photos_url_settings():
         c.patch("/api/v1/settings", json={"photos_url": "https://nas.example.de:5001/photo/"})
         assert c.get("/api/v1/map-config").json()["photos_url"] == "https://nas.example.de:5001/photo"
         c.patch("/api/v1/settings", json={"satellite": "esri", "maptiler_key": "", "photos_url": ""})
+
+
+def test_duplicates_shown_once(library, acl):
+    """Exakte Kopien zählen nur einmal – die eigene zuerst; Dateien mit gleicher Größe, aber anderem Inhalt bleiben."""
+    data = open(library["mallorca"], "rb").read()
+    write(f"{HOMES}/anna/Photos/Kopie/IMG_1.jpg", data, mtime=2_000_000_000)          # annas Kopie (neuer)
+    write(f"{PHOTO}/Urlaub/Doppelt/IMG_1 Kopie.jpg", data, mtime=2_000_000_000)       # zweite gemeinsame Kopie (neuer)
+    other = bytearray(data)
+    other[-3] ^= 0xFF                                                                  # gleiche Größe, anderer Inhalt
+    write(f"{PHOTO}/Urlaub/Anders/fast_gleich.jpg", bytes(other))
+    r = scanner.run("manuell")
+    assert r["status"] == "fertig"
+    with connect() as conn:
+        assert scanner.duplicate_count(conn) == 2
+        ids = {row["path"]: row["id"] for row in conn.execute("SELECT id, path FROM photos")}
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+        pts = {p[0] for p in c.get("/api/v1/points", headers=sso("anna")).json()["points"]}
+        anna_copy = ids[f"{HOMES}/anna/Photos/Kopie/IMG_1.jpg"]
+        assert anna_copy in pts and ids[library["mallorca"]] not in pts                  # die eigene gewinnt
+        assert ids[f"{PHOTO}/Urlaub/Doppelt/IMG_1 Kopie.jpg"] not in pts
+        assert ids[f"{PHOTO}/Urlaub/Anders/fast_gleich.jpg"] in pts                     # anderer Inhalt bleibt
+        # ben sieht annas Kopie nicht – er bekommt die älteste gemeinsame
+        ben = {p[0] for p in c.get("/api/v1/points", headers=sso("ben")).json()["points"]}
+        assert ids[library["mallorca"]] in ben and anna_copy not in ben
+        assert ids[f"{PHOTO}/Urlaub/Doppelt/IMG_1 Kopie.jpg"] not in ben
+        # Statistik zählt ebenfalls nur einmal; direkt aufrufen lässt sich jede Kopie trotzdem
+        assert c.get(f"/api/v1/photos/{ids[library['mallorca']]}/original", headers=sso("anna")).status_code == 200
+    # Datei geändert → Prüfsumme neu, keine Kopie mehr
+    write(f"{HOMES}/anna/Photos/Kopie/IMG_1.jpg", data + b"\x00", mtime=2_000_000_100)
+    scanner.run("manuell")
+    with connect() as conn:
+        assert scanner.duplicate_count(conn) == 1
+
+
+def test_file_hash_sampling(tmp_path, monkeypatch):
+    big = tmp_path / "gross.mp4"
+    big.write_bytes(b"a" * 3000 + b"b" * 3000)
+    monkeypatch.setattr(scanner, "FULL_HASH_LIMIT", 1000)
+    monkeypatch.setattr(scanner, "SAMPLE", 100)
+    h1 = scanner.file_hash(str(big))
+    big.write_bytes(b"a" * 3000 + b"c" * 3000)
+    assert h1.startswith("s") and scanner.file_hash(str(big)) != h1

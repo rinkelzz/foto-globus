@@ -33,15 +33,33 @@ def shared_folders_allowed(conn: sqlite3.Connection, user: str, folders: Set[str
     return access.readable_folders(folders, root, user)
 
 
-def visible_rows(conn: sqlite3.Connection, user: str, sql_cols: str, where: str = "1=1", params=()) -> List[sqlite3.Row]:
+def visible_rows(conn: sqlite3.Connection, user: str, sql_cols: str, where: str = "1=1", params=(),
+                 dedupe: bool = True) -> List[sqlite3.Row]:
+    """Fotos, die user sehen darf. Mit dedupe zählt jede exakte Kopie (gleiche Größe + Prüfsumme) nur einmal."""
     rows = conn.execute(
-        f"SELECT {sql_cols}, scope, owner, folder FROM photos "
+        f"SELECT {sql_cols}, scope, owner, folder, size AS _size, hash AS _hash, mtime AS _mtime, id AS _id FROM photos "
         f"WHERE ({where}) AND (scope = 'shared' OR (scope = 'personal' AND owner = ? COLLATE NOCASE))",
         tuple(params) + (user,),
     ).fetchall()
     shared = {r["folder"] for r in rows if r["scope"] == "shared"}
     allowed = shared_folders_allowed(conn, user, shared) if shared else set()
-    return [r for r in rows if r["scope"] == "personal" or r["folder"] in allowed]
+    rows = [r for r in rows if r["scope"] == "personal" or r["folder"] in allowed]
+    return without_duplicates(rows) if dedupe else rows
+
+
+def without_duplicates(rows) -> list:
+    """Von mehreren exakten Kopien bleibt eine: die eigene (persönlicher Bereich) zuerst, sonst die älteste Datei."""
+    best: Dict[tuple, sqlite3.Row] = {}
+    for r in rows:
+        if not r["_hash"]:
+            continue
+        key = (r["_size"], r["_hash"])
+        cur = best.get(key)
+        rank = (0 if r["scope"] == "personal" else 1, r["_mtime"], r["_id"])
+        if cur is None or rank < (0 if cur["scope"] == "personal" else 1, cur["_mtime"], cur["_id"]):
+            best[key] = r
+    keep = {id(r) for r in best.values()}
+    return [r for r in rows if not r["_hash"] or id(r) in keep]
 
 
 def _filtered(rows, year_from: Optional[int], year_to: Optional[int], scope: str):
@@ -58,7 +76,7 @@ def _filtered(rows, year_from: Optional[int], year_to: Optional[int], scope: str
 
 
 def _photo(conn: sqlite3.Connection, user: str, photo_id: int) -> sqlite3.Row:
-    rows = visible_rows(conn, user, "id, path, name, kind, media", "id = ?", (photo_id,))
+    rows = visible_rows(conn, user, "id, path, name, kind, media", "id = ?", (photo_id,), dedupe=False)
     if not rows:
         raise HTTPException(404, "Foto nicht gefunden")
     return rows[0]
@@ -117,7 +135,7 @@ def photo_info(data: InfoIn, user: str = Depends(photo_user), conn: sqlite3.Conn
         chunk = ids[i:i + 500]
         for r in visible_rows(conn, user, "id, name, taken_at, lat, lon, alt, make, model, width, height, kind, size, "
                                           "media, duration, place, cc",
-                              f"id IN ({','.join('?' * len(chunk))})", chunk):
+                              f"id IN ({','.join('?' * len(chunk))})", chunk, dedupe=False):
             out[r["id"]] = {
                 "id": r["id"], "name": r["name"], "taken_at": r["taken_at"], "lat": r["lat"], "lon": r["lon"],
                 "alt": r["alt"], "camera": " ".join(x for x in (r["make"], r["model"]) if x) or None,

@@ -79,6 +79,8 @@ Dir gefällt der Foto-Globus? Über einen Kaffee freue ich mich – die App blei
 - **Filter:** Zeitraum (von/bis Jahr) und Bereich (alle, nur meine, nur gemeinsame).
 - Liest **JPEG, HEIC/HEIF (iPhone), PNG, TIFF, DNG, NEF, ARW, CR2** – in reinem Python, ohne Pillow oder andere
   Bibliotheken mit C-Code. Die Vorschaubilder kommen von Synology Photos selbst (`@eaDir`), notfalls aus den Exif-Daten.
+- **Doppelte Fotos** (exakte Kopien, z. B. in „Meine“ und „Gemeinsam“) werden nur einmal gezeigt und gezählt –
+  die eigene Kopie zuerst. Die Dateien bleiben unberührt.
 - **Nächtliche Suche** nach neuen Fotos (Uhrzeit einstellbar) plus „Jetzt suchen“. Ab dem zweiten Mal werden nur neue
   und geänderte Dateien gelesen; ist ein Volume gerade nicht da, bleibt der Index stehen.
 - **Single Sign-on im DSM-Fenster**, sonst Anmeldung mit dem DSM-Konto (auch mit Zwei-Faktor-Code).
